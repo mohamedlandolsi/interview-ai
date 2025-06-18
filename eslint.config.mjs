@@ -24,7 +24,9 @@ const eslintConfig = [
       // Allow prefer-const warnings
       "prefer-const": "warn",
       // Allow exhaustive deps warnings
-      "react-hooks/exhaustive-deps": "warn"
+      "react-hooks/exhaustive-deps": "warn",
+      // Allow require imports in test files
+      "@typescript-eslint/no-require-imports": "off"
     }
   }
 ];

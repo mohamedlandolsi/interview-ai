@@ -51,7 +51,7 @@ export function createAuthErrorResponse(
 /**
  * Extract user authentication from API request
  */
-export async function getAuthenticatedUser(request: NextRequest): Promise<{
+export async function getAuthenticatedUser(_request: NextRequest): Promise<{
   user: User | null
   error: ApiAuthError | null
 }> {
@@ -231,16 +231,16 @@ export function validateMethod(request: NextRequest, allowedMethods: string[]): 
  */
 export function createProtectedHandler(options: {
   methods: string[]
-  handler: (request: NextRequest, context: { user: User; params?: any }) => Promise<NextResponse>
+  handler: (request: NextRequest, context: { user: User; params: any }) => Promise<NextResponse>
 }) {
-  return withAuth(async (request: NextRequest, context: { user: User; params?: any }) => {
+  return withAuth(async (request: NextRequest, context: { user: User; params: any }) => {
     // Validate HTTP method
     const methodError = validateMethod(request, options.methods)
     if (methodError) {
       return methodError
     }
 
-    return await options.handler(request, context)
+    return await options.handler(request, { ...context, params: context.params || {} })
   })
 }
 

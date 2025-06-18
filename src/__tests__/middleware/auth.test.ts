@@ -6,11 +6,14 @@ jest.mock('@/utils/supabase/middleware', () => ({
   createMiddlewareClient: jest.fn(),
 }))
 
-const { createMiddlewareClient } = require('@/utils/supabase/middleware')
-
 describe('Middleware Authentication', () => {
   let mockRequest: NextRequest
-  let mockSupabase: any
+  let mockSupabase: {
+    auth: {
+      getSession: jest.Mock
+      getUser: jest.Mock
+    }
+  }
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -18,10 +21,10 @@ describe('Middleware Authentication', () => {
     mockSupabase = {
       auth: {
         getSession: jest.fn(),
-        getUser: jest.fn(),
-      },
+        getUser: jest.fn(),      },
     }
 
+    const { createMiddlewareClient } = jest.requireMock('@/utils/supabase/middleware')
     createMiddlewareClient.mockReturnValue({
       supabase: mockSupabase,
       response: NextResponse.next(),

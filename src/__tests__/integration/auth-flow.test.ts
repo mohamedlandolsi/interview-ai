@@ -10,14 +10,20 @@ import { middleware } from '../../../middleware'
 import { withAuth } from '../../lib/api-auth'
 
 // Mock implementations
-jest.mock('@/utils/supabase/middleware')
-jest.mock('@/utils/supabase/server')
-
-const mockMiddlewareClient = require('@/utils/supabase/middleware')
-const mockServerClient = require('@/utils/supabase/server')
+jest.mock('@/utils/supabase/middleware', () => ({
+  createMiddlewareClient: jest.fn(),
+}))
+jest.mock('@/utils/supabase/server', () => ({
+  createClient: jest.fn(),
+}))
 
 describe('Authentication Integration Tests', () => {
-  let mockSupabase: any
+  let mockSupabase: {
+    auth: {
+      getSession: jest.Mock
+      getUser: jest.Mock
+    }
+  }
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -29,12 +35,15 @@ describe('Authentication Integration Tests', () => {
       },
     }
 
-    mockMiddlewareClient.createMiddlewareClient.mockReturnValue({
+    const { createMiddlewareClient } = jest.requireMock('@/utils/supabase/middleware')
+    const { createClient } = jest.requireMock('@/utils/supabase/server')
+
+    createMiddlewareClient.mockReturnValue({
       supabase: mockSupabase,
       response: NextResponse.next(),
     })
 
-    mockServerClient.createClient.mockResolvedValue(mockSupabase)
+    createClient.mockResolvedValue(mockSupabase)
   })
 
   const createMockRequest = (pathname: string, method = 'GET', headers?: Record<string, string>) => {

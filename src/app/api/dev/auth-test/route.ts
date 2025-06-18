@@ -5,60 +5,11 @@ import { NextRequest, NextResponse } from 'next/server'
  * These should NOT be included in production builds
  */
 
-export interface AuthTestResult {
+interface AuthTestResult {
   success: boolean
   message: string
   details?: any
   timestamp: string
-}
-
-/**
- * Test API authentication helper
- * Only available in development mode
- */
-export async function testApiAuth(endpoint: string, options: {
-  method?: string
-  headers?: Record<string, string>
-  body?: any
-} = {}): Promise<AuthTestResult> {
-  if (process.env.NODE_ENV === 'production') {
-    return {
-      success: false,
-      message: 'Auth testing is disabled in production',
-      timestamp: new Date().toISOString(),
-    }
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      method: options.method || 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      body: options.body ? JSON.stringify(options.body) : undefined,
-    })
-
-    const data = await response.json()
-
-    return {
-      success: response.ok,
-      message: `${options.method || 'GET'} ${endpoint} - ${response.status} ${response.statusText}`,
-      details: {
-        status: response.status,
-        headers: Object.fromEntries(response.headers.entries()),
-        body: data,
-      },
-      timestamp: new Date().toISOString(),
-    }
-  } catch (error) {
-    return {
-      success: false,
-      message: `Network error testing ${endpoint}`,
-      details: { error: error instanceof Error ? error.message : 'Unknown error' },
-      timestamp: new Date().toISOString(),
-    }
-  }
 }
 
 /**
@@ -73,6 +24,46 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  /**
+   * Test API authentication helper - internal function
+   */
+  async function testApiAuth(endpoint: string, options: {
+    method?: string
+    headers?: Record<string, string>
+    body?: any
+  } = {}): Promise<AuthTestResult> {
+    try {
+      const response = await fetch(endpoint, {
+        method: options.method || 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      })
+
+      const data = await response.json()
+
+      return {
+        success: response.ok,
+        message: `${options.method || 'GET'} ${endpoint} - ${response.status} ${response.statusText}`,
+        details: {
+          status: response.status,
+          headers: Object.fromEntries(response.headers.entries()),
+          body: data,
+        },
+        timestamp: new Date().toISOString(),
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: `Network error testing ${endpoint}`,
+        details: { error: error instanceof Error ? error.message : 'Unknown error' },
+        timestamp: new Date().toISOString(),
+      }
+    }
+  }
+
   const results: AuthTestResult[] = []
 
   // Test public API endpoints
@@ -83,7 +74,6 @@ export async function GET(request: NextRequest) {
   // Test protected API endpoints
   const protectedTests = [
     { endpoint: '/api/profile', expected: 'Should require auth' },
-    { endpoint: '/api/dashboard/stats', expected: 'Should require auth' },
   ]
 
   // Run tests
