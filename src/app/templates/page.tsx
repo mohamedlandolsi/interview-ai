@@ -10,24 +10,14 @@ import {
   Select, 
   SelectContent, 
   SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+  SelectTrigger,   SelectValue 
 } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import { 
   Plus, 
   Search, 
-  Filter, 
   Copy, 
-  Trash2, 
+  Trash2,
   Edit3, 
   Eye,
   FileText,

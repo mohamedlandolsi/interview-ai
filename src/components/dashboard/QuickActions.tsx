@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, FileText, Users, Settings, BarChart3 } from "lucide-react"
+import { Plus, FileText, Users, BarChart3 } from "lucide-react"
 
 const quickActions = [
   {

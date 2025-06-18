@@ -7,27 +7,28 @@ import { RecentInterviewsTable } from "@/components/dashboard/RecentInterviewsTa
 import { QuickActions } from "@/components/dashboard/QuickActions"
 import { ActivityTimeline } from "@/components/dashboard/ActivityTimeline"
 import { ChartPlaceholder } from "@/components/dashboard/ChartPlaceholder"
+import { DashboardRoute } from "@/components/auth/ProtectedRoute"
 
 export default function DashboardPage() {
   return (
-    <div className="flex h-screen bg-background">
-      {/* Sidebar */}
-      <DashboardSidebar />
+    <DashboardRoute>
+      <div className="flex h-screen bg-background">
+        {/* Sidebar */}
+        <DashboardSidebar />
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <DashboardHeader />
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Header */}
+          <DashboardHeader />
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Page Content */}
+          <main className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Welcome Section */}
-          <div className="flex flex-col space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">
+          <div className="flex flex-col space-y-2">            <h1 className="text-3xl font-bold tracking-tight">
               Welcome back, John! 👋
             </h1>
             <p className="text-muted-foreground">
-              Here's what's happening with your interviews today.
+              Here&apos;s what&apos;s happening with your interviews today.
             </p>
           </div>
 
@@ -56,9 +57,7 @@ export default function DashboardPage() {
               {/* Activity Timeline */}
               <ActivityTimeline />
             </div>
-          </div>
-
-          {/* Additional Charts */}
+          </div>          {/* Additional Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <ChartPlaceholder title="Performance by Department" height="h-48" />
             <ChartPlaceholder title="Interview Duration Analysis" height="h-48" />
@@ -66,5 +65,6 @@ export default function DashboardPage() {
         </main>
       </div>
     </div>
+    </DashboardRoute>
   )
 }

@@ -87,17 +87,16 @@ export default function ForgotPasswordPage() {
             </div>
             <CardTitle className="text-2xl font-bold">Check your email</CardTitle>
             <CardDescription>
-              We've sent a password reset link to<br />
+              We&apos;ve sent a password reset link to<br />
               <span className="font-medium text-foreground">{form.getValues("email")}</span>
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-4 text-center text-sm text-muted-foreground">
+          <CardContent className="space-y-4">            <div className="space-y-4 text-center text-sm text-muted-foreground">
               <p>
-                Click the link in the email to reset your password. If you don't see it, check your spam folder.
+                Click the link in the email to reset your password. If you don&apos;t see it, check your spam folder.
               </p>
               <p>
-                Didn't receive the email?{" "}
+                Didn&apos;t receive the email?{" "}
                 <button
                   onClick={handleResendEmail}
                   className="text-primary hover:underline font-medium"
@@ -131,9 +130,8 @@ export default function ForgotPasswordPage() {
               <Mail className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Forgot your password?</CardTitle>
-          <CardDescription>
-            No worries! Enter your email and we'll send you a reset link.
+          <CardTitle className="text-2xl font-bold">Forgot your password?</CardTitle>          <CardDescription>
+            No worries! Enter your email and we&apos;ll send you a reset link.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

@@ -4,9 +4,7 @@ import {
   BarChart3, 
   Shield, 
   Clock, 
-  Users, 
   Brain,
-  Zap,
   Target,
   CheckCircle2
 } from "lucide-react";

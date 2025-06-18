@@ -24,7 +24,6 @@ import { Progress } from "@/components/ui/progress"
 import {
   Pagination,
   PaginationContent,
-  PaginationEllipsis,
   PaginationItem,
   PaginationLink,
   PaginationNext,
@@ -40,7 +39,6 @@ import {
 import { 
   Plus, 
   Search, 
-  Filter, 
   Calendar, 
   Clock, 
   User, 
@@ -198,19 +196,10 @@ export default function InterviewsPage() {
   const paginatedInterviews = filteredInterviews.slice(startIndex, startIndex + itemsPerPage)
 
   const handleSelectInterview = (interviewId: string) => {
-    setSelectedInterviews(prev => 
-      prev.includes(interviewId) 
+    setSelectedInterviews(prev =>      prev.includes(interviewId) 
         ? prev.filter(id => id !== interviewId)
         : [...prev, interviewId]
     )
-  }
-
-  const handleSelectAll = () => {
-    if (selectedInterviews.length === paginatedInterviews.length) {
-      setSelectedInterviews([])
-    } else {
-      setSelectedInterviews(paginatedInterviews.map(interview => interview.id))
-    }
   }
 
   const handleBulkAction = (action: string) => {

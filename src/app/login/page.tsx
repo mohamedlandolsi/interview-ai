@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import Link from "next/link"
-import { Eye, EyeOff, Loader2 } from "lucide-react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -16,7 +17,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Form,
@@ -26,10 +26,12 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useAuth } from "@/contexts/AuthContext"
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
   rememberMe: z.boolean(),
 })
 
@@ -37,7 +39,15 @@ type LoginFormData = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  
+  const { signIn, signInWithOAuth, user, loading } = useAuth()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  const returnUrl = searchParams.get('returnUrl') || '/dashboard'
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -48,23 +58,92 @@ export default function LoginPage() {
     },
   })
 
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (user && !loading) {
+      router.push(returnUrl)
+    }
+  }, [user, loading, router, returnUrl])
+
+  // Clear messages when form changes
+  useEffect(() => {
+    const subscription = form.watch(() => {
+      setAuthError(null)
+      setSuccessMessage(null)
+    })
+    return () => subscription.unsubscribe()
+  }, [form])
+
   const onSubmit = async (data: LoginFormData) => {
-    setIsLoading(true)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-      console.log("Login data:", data)
-      // Handle successful login here
-    } catch (error) {
-      console.error("Login error:", error)
+      setIsLoading(true)
+      setAuthError(null)
+      setSuccessMessage(null)
+
+      const { error } = await signIn(data.email, data.password)
+
+      if (error) {
+        // Handle specific error types
+        if (error.message.includes('Invalid login credentials')) {
+          setAuthError('Invalid email or password. Please try again.')
+        } else if (error.message.includes('Email not confirmed')) {
+          setAuthError('Please check your email and click the confirmation link before signing in.')
+        } else if (error.message.includes('Too many requests')) {
+          setAuthError('Too many login attempts. Please wait a few minutes before trying again.')
+        } else {
+          setAuthError(error.message)
+        }
+      } else {
+        setSuccessMessage('Login successful! Redirecting...')
+        // Remember me functionality
+        if (data.rememberMe) {
+          localStorage.setItem('rememberMe', 'true')
+        } else {
+          localStorage.removeItem('rememberMe')
+        }
+        
+        // Redirect will happen automatically via useEffect
+      }
+    } catch (error: any) {
+      setAuthError('An unexpected error occurred. Please try again.')
+      console.error('Login error:', error)
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleSocialLogin = (provider: string) => {
-    console.log(`Login with ${provider}`)
-    // Handle social login here
+  const handleSocialLogin = async (provider: 'google' | 'github') => {
+    try {
+      setIsLoading(true)
+      setAuthError(null)
+      
+      const { error } = await signInWithOAuth(provider)
+      
+      if (error) {
+        setAuthError(`Failed to sign in with ${provider}. Please try again.`)
+      }
+    } catch (error: any) {
+      setAuthError('An unexpected error occurred during social login.')
+      console.error('Social login error:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Show loading screen if checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-center space-x-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Checking authentication...</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -73,9 +152,9 @@ export default function LoginPage() {
         <CardHeader className="space-y-1 text-center">
           <div className="flex items-center justify-center mb-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-              <span className="text-lg font-bold text-primary-foreground">IQ</span>
+              <span className="text-lg font-bold text-primary-foreground">AI</span>
             </div>
-            <span className="ml-2 text-2xl font-bold text-foreground">InterQ</span>
+            <span className="ml-2 text-2xl font-bold text-foreground">JobInterviewer</span>
           </div>
           <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
           <CardDescription>
@@ -83,6 +162,19 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {authError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{authError}</AlertDescription>
+            </Alert>
+          )}
+
+          {successMessage && (
+            <Alert className="border-green-500 bg-green-50 text-green-800">
+              <AlertDescription>{successMessage}</AlertDescription>
+            </Alert>
+          )}
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
@@ -200,7 +292,7 @@ export default function LoginPage() {
           <div className="grid grid-cols-2 gap-4">
             <Button
               variant="outline"
-              onClick={() => handleSocialLogin("Google")}
+              onClick={() => handleSocialLogin("google")}
               disabled={isLoading}
             >
               <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
@@ -226,21 +318,21 @@ export default function LoginPage() {
 
             <Button
               variant="outline"
-              onClick={() => handleSocialLogin("Microsoft")}
+              onClick={() => handleSocialLogin("github")}
               disabled={isLoading}
             >
               <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-                <path fill="#f25022" d="M1 1h10v10H1z" />
-                <path fill="#00a4ef" d="M13 1h10v10H13z" />
-                <path fill="#7fba00" d="M1 13h10v10H1z" />
-                <path fill="#ffb900" d="M13 13h10v10H13z" />
+                <path
+                  fill="currentColor"
+                  d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385c.6.105.825-.255.825-.57c0-.285-.015-1.23-.015-2.235c-3.015.555-3.795-.735-4.035-1.41c-.135-.345-.72-1.41-1.23-1.695c-.42-.225-1.02-.78-.015-.795c.945-.015 1.62.87 1.845 1.23c1.08 1.815 2.805 1.305 3.495.99c.105-.78.42-1.305.765-1.605c-2.67-.3-5.46-1.335-5.46-5.925c0-1.305.465-2.385 1.23-3.225c-.12-.3-.54-1.53.12-3.18c0 0 1.005-.315 3.3 1.23c.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23c.66 1.65.24 2.88.12 3.18c.765.84 1.23 1.905 1.23 3.225c0 4.605-2.805 5.625-5.475 5.925c.435.375.81 1.095.81 2.22c0 1.605-.015 2.895-.015 3.3c0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"
+                />
               </svg>
-              Microsoft
+              GitHub
             </Button>
           </div>
 
           <div className="text-center text-sm">
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Link href="/register" className="text-primary hover:underline">
               Sign up
             </Link>

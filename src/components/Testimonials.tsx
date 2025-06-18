@@ -75,9 +75,8 @@ export function Testimonials() {
                   ))}
                 </div>
 
-                {/* Testimonial content */}
-                <p className="text-muted-foreground mb-6 leading-relaxed">
-                  "{testimonial.content}"
+                {/* Testimonial content */}                <p className="text-muted-foreground mb-6 leading-relaxed">
+                  &ldquo;{testimonial.content}&rdquo;
                 </p>
 
                 {/* Author info */}
