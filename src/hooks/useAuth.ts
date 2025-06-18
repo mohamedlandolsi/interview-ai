@@ -90,7 +90,6 @@ export function usePermissions() {
   const hasRole = (role: string): boolean => {
     return profile?.role === role
   }
-
   const hasPermission = (permission: string): boolean => {
     // In a real app, you'd check against user's actual permissions
     // For now, we'll use role-based checks
@@ -99,6 +98,17 @@ export function usePermissions() {
     const rolePermissions: Record<string, string[]> = {
       admin: ['*'], // Admin has all permissions
       interviewer: [
+        'dashboard:access',
+        'interviews:read', 
+        'interviews:create', 
+        'interviews:update', 
+        'interviews:manage',
+        'results:read',
+        'templates:read',
+        'templates:create',
+        'templates:update'
+      ],
+      hr_manager: [
         'dashboard:access',
         'interviews:read', 
         'interviews:create', 

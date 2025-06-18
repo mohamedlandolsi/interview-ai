@@ -11,6 +11,8 @@ import { Calendar, Search, Filter, Download, Eye, Clock, User, Star, ChevronDown
 import { format } from 'date-fns'
 import { ResultsDetailView } from '@/components/results/ResultsDetailView'
 import { AnalyticsDashboard } from '@/components/results/AnalyticsDashboard'
+import { DashboardLayout } from '@/components/Layout'
+import { DashboardRoute } from '@/components/auth/ProtectedRoute'
 
 // Export functions (simplified for now)
 const exportToPDF = (results: any[], filename: string) => {
@@ -197,26 +199,28 @@ export default function ResultsPage() {
   const handleExportSingle = (result: any) => {
     exportToPDF([result], `${result.candidateName}-results`)
   }
-
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Interview Results</h1>
-          <p className="text-muted-foreground mt-1">Review and analyze interview performance data</p>
-        </div>
-        <div className="flex gap-2">
-          <AnalyticsDashboard results={filteredResults} />
-          <Button variant="outline" onClick={handleExportCSV}>
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
-          <Button onClick={handleExportPDF}>
-            <Download className="h-4 w-4 mr-2" />
-            Export PDF
-          </Button>
-        </div>
-      </div>
+    <DashboardRoute>
+      <DashboardLayout>
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Interview Results</h1>
+              <p className="text-muted-foreground mt-1">Review and analyze interview performance data</p>
+            </div>
+            <div className="flex gap-2">
+              <AnalyticsDashboard results={filteredResults} />
+              <Button variant="outline" onClick={handleExportCSV}>
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
+              <Button onClick={handleExportPDF}>
+                <Download className="h-4 w-4 mr-2" />
+                Export PDF
+              </Button>
+            </div>
+          </div>
 
       {/* Filters */}
       <Card>
@@ -417,8 +421,7 @@ export default function ResultsPage() {
           </Card>
         ))}
       </div>      {filteredResults.length === 0 && (
-        <Card className="text-center py-12">
-          <CardContent>
+        <Card className="text-center py-12">          <CardContent>
             <div className="text-muted-foreground">
               <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <h3 className="text-lg font-medium mb-2">No results found</h3>
@@ -427,6 +430,8 @@ export default function ResultsPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+        </div>
+      </DashboardLayout>
+    </DashboardRoute>
   )
 }

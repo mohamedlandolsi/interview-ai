@@ -1,31 +1,34 @@
 "use client"
 
-import { DashboardHeader } from "@/components/dashboard/DashboardHeader"
-import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar"
+import { DashboardLayout } from "@/components/Layout"
 import { StatsCards } from "@/components/dashboard/StatsCards"
 import { RecentInterviewsTable } from "@/components/dashboard/RecentInterviewsTable"
 import { QuickActions } from "@/components/dashboard/QuickActions"
 import { ActivityTimeline } from "@/components/dashboard/ActivityTimeline"
 import { ChartPlaceholder } from "@/components/dashboard/ChartPlaceholder"
 import { DashboardRoute } from "@/components/auth/ProtectedRoute"
+import { useAuth } from "@/contexts/AuthContext"
 
 export default function DashboardPage() {
+  const { user, profile, loading } = useAuth()
+
+  const getDisplayName = () => {
+    if (profile?.full_name) return profile.full_name
+    if (user?.email) return user.email.split('@')[0]
+    return 'there'
+  }
+
   return (
     <DashboardRoute>
-      <div className="flex h-screen bg-background">
-        {/* Sidebar */}
-        <DashboardSidebar />
-
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header */}
-          <DashboardHeader />
-
-          {/* Page Content */}
-          <main className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Welcome Section */}
-          <div className="flex flex-col space-y-2">            <h1 className="text-3xl font-bold tracking-tight">
-              Welcome back, John! 👋
+      <DashboardLayout>
+        <div className="space-y-6">
+          {/* Welcome Section */}  
+          <div className="flex flex-col space-y-2">            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+              {loading ? (
+                <div className="h-8 w-64 bg-muted animate-pulse rounded" />
+              ) : (
+                `Welcome back, ${getDisplayName()}! 👋`
+              )}
             </h1>
             <p className="text-muted-foreground">
               Here&apos;s what&apos;s happening with your interviews today.
@@ -57,14 +60,15 @@ export default function DashboardPage() {
               {/* Activity Timeline */}
               <ActivityTimeline />
             </div>
-          </div>          {/* Additional Charts */}
+          </div>
+
+          {/* Additional Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <ChartPlaceholder title="Performance by Department" height="h-48" />
             <ChartPlaceholder title="Interview Duration Analysis" height="h-48" />
           </div>
-        </main>
-      </div>
-    </div>
+        </div>
+      </DashboardLayout>
     </DashboardRoute>
   )
 }

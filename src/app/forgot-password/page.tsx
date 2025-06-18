@@ -24,6 +24,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
+import { useAuth } from "@/contexts/AuthContext"
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -35,6 +36,7 @@ export default function ForgotPasswordPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [error, setError] = useState("")
+  const { resetPassword } = useAuth()
 
   const form = useForm<ForgotPasswordFormData>({
     resolver: zodResolver(forgotPasswordSchema),
@@ -48,20 +50,21 @@ export default function ForgotPasswordPage() {
     setError("")
     
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const { error: resetError } = await resetPassword(data.email)
       
-      // Simulate random success/error for demo
-      const isSuccessful = Math.random() > 0.3
-      
-      if (isSuccessful) {
-        setIsSuccess(true)
-        console.log("Password reset email sent to:", data.email)
+      if (resetError) {
+        if (resetError.message.includes('User not found')) {
+          setError("No account found with this email address. Please check your email and try again.")
+        } else if (resetError.message.includes('Email rate limit exceeded')) {
+          setError("Too many requests. Please wait a few minutes before trying again.")
+        } else {
+          setError(resetError.message || "Failed to send reset email. Please try again.")
+        }
       } else {
-        setError("Email address not found. Please check your email and try again.")
+        setIsSuccess(true)
       }
     } catch (error) {
-      console.error("Forgot password error:", error)
+      console.error("Password reset error:", error)
       setError("Something went wrong. Please try again later.")
     } finally {
       setIsLoading(false)
@@ -142,13 +145,13 @@ export default function ForgotPasswordPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
+                    <FormLabel>Email</FormLabel>                    <FormControl>
                       <Input
                         placeholder="Enter your email address"
                         type="email"
                         {...field}
                         disabled={isLoading}
+                        autoComplete="email"
                       />
                     </FormControl>
                     <FormMessage />

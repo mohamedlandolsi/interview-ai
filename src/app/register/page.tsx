@@ -105,7 +105,7 @@ export default function RegisterPage() {
   const [userEmail, setUserEmail] = useState('')
   const [passwordStrength, setPasswordStrength] = useState({ score: 0, feedback: "Very weak" })
   
-  const { signUp, signInWithOAuth, user, loading } = useAuth()
+  const { signUp, signInWithOAuth, user, loading, resendVerification } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -146,12 +146,11 @@ export default function RegisterPage() {
     setIsLoading(true)
     setAuthError(null)
     
-    try {
-      // Sign up user with Supabase
+    try {      // Sign up user with Supabase
       const { error } = await signUp(data.email, data.password, {
         data: {
           full_name: data.fullName,
-          company: data.company,
+          company_name: data.company,
         }
       })
 
@@ -176,8 +175,7 @@ export default function RegisterPage() {
     setIsLoading(true)
     setAuthError(null)
     
-    try {
-      const { error } = await signInWithOAuth(provider)
+    try {      const { error } = await signInWithOAuth(provider)
       
       if (error) {
         setAuthError(error.message)
@@ -190,14 +188,18 @@ export default function RegisterPage() {
     }
   }
 
-  const resendVerification = async () => {
+  const resendVerificationEmail = async () => {
     if (!userEmail) return
     
     setIsLoading(true)
     try {
-      await signUp(userEmail, '', { data: {} }) // Trigger resend
-    } catch (error) {
+      const { error } = await resendVerification(userEmail)
+      if (error) {
+        setAuthError(error.message)
+      }
+    } catch (error: any) {
       console.error('Resend verification error:', error)
+      setAuthError('Failed to resend verification email')
     } finally {
       setIsLoading(false)
     }
@@ -245,7 +247,7 @@ export default function RegisterPage() {
                   variant="link" 
                   size="sm" 
                   className="p-0 h-auto font-normal"
-                  onClick={resendVerification}
+                  onClick={resendVerificationEmail}
                   disabled={isLoading}
                 >
                   {isLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
@@ -371,13 +373,13 @@ export default function RegisterPage() {
                     <FormLabel>Email</FormLabel>
                     <FormControl>
                       <div className="relative">
-                        <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Input
+                        <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />                        <Input
                           {...field}
                           type="email"
                           placeholder="Enter your email"
                           className="pl-10"
                           disabled={isLoading}
+                          autoComplete="email"
                         />
                       </div>
                     </FormControl>
@@ -415,8 +417,7 @@ export default function RegisterPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
+                    <FormLabel>Password</FormLabel>                    <FormControl>
                       <div className="relative">
                         <Input
                           {...field}
@@ -424,6 +425,7 @@ export default function RegisterPage() {
                           placeholder="Create a strong password"
                           className="pr-10"
                           disabled={isLoading}
+                          autoComplete="new-password"
                         />
                         <button
                           type="button"
@@ -517,8 +519,7 @@ export default function RegisterPage() {
                 name="confirmPassword"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Confirm Password</FormLabel>
-                    <FormControl>
+                    <FormLabel>Confirm Password</FormLabel>                    <FormControl>
                       <div className="relative">
                         <Input
                           {...field}
@@ -526,6 +527,7 @@ export default function RegisterPage() {
                           placeholder="Confirm your password"
                           className="pr-10"
                           disabled={isLoading}
+                          autoComplete="new-password"
                         />
                         <button
                           type="button"

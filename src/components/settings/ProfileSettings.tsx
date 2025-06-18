@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState, useRef } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,6 +10,15 @@ import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { 
   Form,
   FormControl,
@@ -31,17 +41,26 @@ import {
   Camera,
   Save,
   Eye,
-  EyeOff
+  EyeOff,
+  Loader2,
+  Check,
+  X,
+  AlertTriangle,
+  Trash2
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+
+// Toast notification state type
+interface ToastNotification {
+  message: string
+  type: 'success' | 'error' | 'info'
+}
 
 const profileFormSchema = z.object({
-  firstName: z.string().min(2, 'First name must be at least 2 characters'),
-  lastName: z.string().min(2, 'Last name must be at least 2 characters'),
+  full_name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
   phone: z.string().optional(),
-  location: z.string().optional(),
-  bio: z.string().max(500, 'Bio must be less than 500 characters').optional(),
-  jobTitle: z.string().optional(),
+  company_name: z.string().optional(),
   department: z.string().optional(),
 })
 
@@ -58,22 +77,39 @@ type ProfileFormValues = z.infer<typeof profileFormSchema>
 type PasswordFormValues = z.infer<typeof passwordFormSchema>
 
 export function ProfileSettings() {
+  const { user, profile, updateProfile, signOut } = useAuth()
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [passwordChanging, setPasswordChanging] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [notification, setNotification] = useState<ToastNotification | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Auto-hide notification after 5 seconds
+  React.useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [notification])
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+    setNotification({ message, type })
+  }
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.doe@company.com',
-      phone: '+1 (555) 123-4567',
-      location: 'San Francisco, CA',
-      bio: 'Experienced HR professional with 8+ years in talent acquisition and employee development.',
-      jobTitle: 'Senior HR Manager',
-      department: 'Human Resources',
+      full_name: profile?.full_name || '',
+      email: user?.email || '',
+      phone: profile?.phone || '',
+      company_name: profile?.company_name || '',
+      department: profile?.department || '',
     },
   })
 
@@ -86,26 +122,195 @@ export function ProfileSettings() {
     },
   })
 
-  const onProfileSubmit = (data: ProfileFormValues) => {
-    console.log('Profile data:', data)
-    // TODO: Implement profile update
-  }
-
-  const onPasswordSubmit = (data: PasswordFormValues) => {
-    console.log('Password change:', data)
-    // TODO: Implement password change
-  }
-
-  const handleAvatarUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      setAvatarFile(file)
-      // TODO: Implement avatar upload
+  // Update form values when profile data changes
+  React.useEffect(() => {
+    if (profile) {
+      profileForm.reset({
+        full_name: profile.full_name || '',
+        email: user?.email || '',
+        phone: profile.phone || '',
+        company_name: profile.company_name || '',
+        department: profile.department || '',
+      })
     }
+  }, [profile, user, profileForm])
+
+  // Upload avatar to Supabase storage
+  const uploadAvatar = async (file: File): Promise<string | null> => {
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${user?.id}-${Date.now()}.${fileExt}`
+      const filePath = `avatars/${fileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError)
+        return null
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+
+      return publicUrl
+    } catch (error) {
+      console.error('Avatar upload error:', error)
+      return null
+    }
+  }
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return    // Validate file size (2MB max)
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('File size must be less than 2MB', 'error')
+      return
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select an image file', 'error')
+      return
+    }    setAvatarFile(file)
+    setAvatarUploading(true)
+
+    try {
+      const avatarUrl = await uploadAvatar(file)
+      if (avatarUrl) {
+        const { error } = await updateProfile({ avatar_url: avatarUrl })
+        if (error) {
+          showToast('Failed to update avatar', 'error')
+        } else {
+          showToast('Avatar updated successfully', 'success')
+        }
+      } else {
+        showToast('Failed to upload avatar', 'error')
+      }
+    } catch (error) {
+      showToast('Failed to upload avatar', 'error')
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
+  const onProfileSubmit = async (data: ProfileFormValues) => {
+    setProfileSaving(true)
+    
+    // Optimistically update the form
+    const originalData = profileForm.getValues()
+    
+    try {
+      const { error } = await updateProfile(data)
+      if (error) {
+        // Revert to original data on error
+        profileForm.reset(originalData)
+        showToast('Failed to update profile', 'error')
+      } else {
+        showToast('Profile updated successfully', 'success')
+      }
+    } catch (error) {
+      // Revert to original data on error
+      profileForm.reset(originalData)
+      showToast('Failed to update profile', 'error')
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
+  const onPasswordSubmit = async (data: PasswordFormValues) => {
+    setPasswordChanging(true)
+    try {
+      // First verify current password by attempting to sign in
+      const { error: signInError } = await supabase.auth.signInWithPassword({        email: user?.email || '',
+        password: data.currentPassword
+      })
+
+      if (signInError) {
+        showToast('Current password is incorrect', 'error')
+        return
+      }
+
+      // Update password
+      const { error } = await supabase.auth.updateUser({
+        password: data.newPassword
+      })
+
+      if (error) {
+        showToast('Failed to update password', 'error')
+      } else {
+        showToast('Password updated successfully', 'success')
+        passwordForm.reset()
+      }
+    } catch (error) {
+      showToast('Failed to update password', 'error')
+    } finally {
+      setPasswordChanging(false)
+    }
+  }
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmation !== 'DELETE') {
+      showToast('Please type DELETE to confirm', 'error')
+      return
+    }
+
+    setDeleting(true)
+    try {
+      // Delete user account
+      const { error } = await supabase.auth.admin.deleteUser(user?.id || '')
+      
+      if (error) {
+        showToast('Failed to delete account', 'error')
+      } else {
+        showToast('Account deleted successfully', 'success')
+        await signOut()
+      }
+    } catch (error) {
+      showToast('Failed to delete account', 'error')
+    } finally {
+      setDeleting(false)
+      setShowDeleteDialog(false)
+    }
+  }
+
+  const getAvatarUrl = () => {
+    if (avatarFile) {
+      return URL.createObjectURL(avatarFile)
+    }
+    return profile?.avatar_url || ''
+  }
+
+  const getInitials = () => {
+    const name = profile?.full_name || user?.email || 'User'
+    return name
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()      .slice(0, 2)
   }
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg border ${
+          notification.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
+          notification.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
+          'bg-blue-50 border-blue-200 text-blue-800'
+        }`}>
+          <div className="flex items-center gap-2">
+            {notification.type === 'success' && <Check className="h-4 w-4" />}
+            {notification.type === 'error' && <X className="h-4 w-4" />}
+            {notification.type === 'info' && <AlertTriangle className="h-4 w-4" />}
+            <span className="text-sm font-medium">{notification.message}</span>
+          </div>
+        </div>
+      )}
       {/* Profile Information */}
       <Card>
         <CardHeader>
@@ -120,22 +325,28 @@ export function ProfileSettings() {
             <div className="relative">
               <Avatar className="h-24 w-24">
                 <AvatarImage 
-                  src={avatarFile ? URL.createObjectURL(avatarFile) : "/avatars/01.png"} 
+                  src={getAvatarUrl()} 
                   alt="Profile picture" 
                 />
-                <AvatarFallback className="text-lg">JD</AvatarFallback>
+                <AvatarFallback className="text-lg">{getInitials()}</AvatarFallback>
               </Avatar>
               <Label 
                 htmlFor="avatar-upload" 
-                className="absolute -bottom-2 -right-2 h-8 w-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center cursor-pointer hover:bg-primary/90 transition-colors"
+                className="absolute -bottom-2 -right-2 h-8 w-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center cursor-pointer hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
-                <Camera className="h-4 w-4" />
+                {avatarUploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Camera className="h-4 w-4" />
+                )}
                 <Input
+                  ref={fileInputRef}
                   id="avatar-upload"
                   type="file"
                   accept="image/*"
                   className="hidden"
                   onChange={handleAvatarUpload}
+                  disabled={avatarUploading}
                 />
               </Label>
             </div>
@@ -145,14 +356,14 @@ export function ProfileSettings() {
                 Upload a new avatar. JPG, PNG or GIF. Max size 2MB.
               </p>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" asChild>
-                  <Label htmlFor="avatar-upload" className="cursor-pointer">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Upload New
-                  </Label>
-                </Button>
-                <Button variant="ghost" size="sm">
-                  Remove
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={avatarUploading}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {avatarUploading ? 'Uploading...' : 'Upload Image'}
                 </Button>
               </div>
             </div>
@@ -166,12 +377,12 @@ export function ProfileSettings() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={profileForm.control}
-                  name="firstName"
+                  name="full_name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>First Name</FormLabel>
+                      <FormLabel>Full Name</FormLabel>
                       <FormControl>
-                        <Input placeholder="Enter your first name" {...field} />
+                        <Input placeholder="Enter your full name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -179,35 +390,21 @@ export function ProfileSettings() {
                 />
                 <FormField
                   control={profileForm.control}
-                  name="lastName"
+                  name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Last Name</FormLabel>
+                      <FormLabel>Email</FormLabel>
                       <FormControl>
-                        <Input placeholder="Enter your last name" {...field} />
+                        <Input placeholder="Enter your email" {...field} disabled />
                       </FormControl>
+                      <FormDescription>
+                        Email cannot be changed from this form. Contact support if needed.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-
-              <FormField
-                control={profileForm.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email Address</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Enter your email" className="pl-10" {...field} />
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
@@ -217,10 +414,7 @@ export function ProfileSettings() {
                     <FormItem>
                       <FormLabel>Phone Number</FormLabel>
                       <FormControl>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                          <Input placeholder="Enter your phone number" className="pl-10" {...field} />
-                        </div>
+                        <Input placeholder="Enter your phone number" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -228,31 +422,26 @@ export function ProfileSettings() {
                 />
                 <FormField
                   control={profileForm.control}
-                  name="location"
+                  name="company_name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Location</FormLabel>
+                      <FormLabel>Company</FormLabel>
                       <FormControl>
-                        <div className="relative">
-                          <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                          <Input placeholder="City, State/Country" className="pl-10" {...field} />
-                        </div>
+                        <Input placeholder="Enter your company name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              </div>              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={profileForm.control}
-                  name="jobTitle"
+                  name="company_name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Job Title</FormLabel>
+                      <FormLabel>Company</FormLabel>
                       <FormControl>
-                        <Input placeholder="Enter your job title" {...field} />
+                        <Input placeholder="Enter your company name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -273,31 +462,19 @@ export function ProfileSettings() {
                 />
               </div>
 
-              <FormField
-                control={profileForm.control}
-                name="bio"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Bio</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Tell us about yourself..." 
-                        className="min-h-[100px]"
-                        {...field} 
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Brief description for your profile. Maximum 500 characters.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               <div className="flex justify-end">
-                <Button type="submit">
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Changes
+                <Button type="submit" disabled={profileSaving}>
+                  {profileSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Changes
+                    </>
+                  )}
                 </Button>
               </div>
             </form>
@@ -305,12 +482,12 @@ export function ProfileSettings() {
         </CardContent>
       </Card>
 
-      {/* Account Security */}
+      {/* Password Change */}
       <Card>
         <CardHeader>
-          <CardTitle>Account Security</CardTitle>
+          <CardTitle>Change Password</CardTitle>
           <CardDescription>
-            Manage your password and security settings.
+            Update your password to keep your account secure.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -324,10 +501,10 @@ export function ProfileSettings() {
                     <FormLabel>Current Password</FormLabel>
                     <FormControl>
                       <div className="relative">
-                        <Input 
-                          type={showCurrentPassword ? "text" : "password"} 
-                          placeholder="Enter your current password" 
-                          {...field} 
+                        <Input
+                          type={showCurrentPassword ? 'text' : 'password'}
+                          placeholder="Enter current password"
+                          {...field}
                         />
                         <Button
                           type="button"
@@ -349,76 +526,85 @@ export function ProfileSettings() {
                 )}
               />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={passwordForm.control}
-                  name="newPassword"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>New Password</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input 
-                            type={showNewPassword ? "text" : "password"} 
-                            placeholder="Enter new password" 
-                            {...field} 
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                            onClick={() => setShowNewPassword(!showNewPassword)}
-                          >
-                            {showNewPassword ? (
-                              <EyeOff className="h-4 w-4" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={passwordForm.control}
-                  name="confirmPassword"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Confirm Password</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Input 
-                            type={showConfirmPassword ? "text" : "password"} 
-                            placeholder="Confirm new password" 
-                            {...field} 
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          >
-                            {showConfirmPassword ? (
-                              <EyeOff className="h-4 w-4" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+              <FormField
+                control={passwordForm.control}
+                name="newPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>New Password</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input
+                          type={showNewPassword ? 'text' : 'password'}
+                          placeholder="Enter new password"
+                          {...field}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                        >
+                          {showNewPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </FormControl>
+                    <FormDescription>
+                      Password must be at least 8 characters long
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={passwordForm.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirm New Password</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          placeholder="Confirm new password"
+                          {...field}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        >
+                          {showConfirmPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <div className="flex justify-end">
-                <Button type="submit">
-                  Update Password
+                <Button type="submit" disabled={passwordChanging}>
+                  {passwordChanging ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Update Password'
+                  )}
                 </Button>
               </div>
             </form>
@@ -426,45 +612,59 @@ export function ProfileSettings() {
         </CardContent>
       </Card>
 
-      {/* Account Status */}
-      <Card>
+      {/* Account Deletion */}
+      <Card className="border-destructive">
         <CardHeader>
-          <CardTitle>Account Status</CardTitle>
+          <CardTitle className="text-destructive">Danger Zone</CardTitle>
           <CardDescription>
-            Your account information and current status.
+            Permanently delete your account and all associated data.
           </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Account Type</Label>
-              <div className="flex items-center gap-2">
-                <Badge variant="default">Premium</Badge>
-                <span className="text-sm text-muted-foreground">Active since March 2024</span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Last Login</Label>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">June 17, 2025 at 2:34 PM</span>
-              </div>
-            </div>
-          </div>
-          
-          <Separator />
-          
-          <div className="flex justify-between items-center">
-            <div>
-              <h4 className="font-medium">Delete Account</h4>
-              <p className="text-sm text-muted-foreground">
-                Permanently delete your account and all associated data.
-              </p>
-            </div>
-            <Button variant="destructive">
-              Delete Account
-            </Button>
-          </div>
+        </CardHeader>        <CardContent>
+          <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <DialogTrigger asChild>
+              <Button variant="destructive" className="w-full sm:w-auto">
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Account
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  Delete Account
+                </DialogTitle>
+                <DialogDescription className="space-y-2">
+                  <p>This action cannot be undone. This will permanently delete your account and remove all your data from our servers.</p>
+                  <p>Type <strong>DELETE</strong> to confirm:</p>
+                  <Input
+                    value={deleteConfirmation}
+                    onChange={(e) => setDeleteConfirmation(e.target.value)}
+                    placeholder="Type DELETE to confirm"
+                    className="mt-2"
+                  />
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleDeleteAccount}
+                  disabled={deleteConfirmation !== 'DELETE' || deleting}
+                  variant="destructive"
+                >
+                  {deleting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete Account'
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
     </div>

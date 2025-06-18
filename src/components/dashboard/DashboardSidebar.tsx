@@ -43,9 +43,10 @@ const sidebarItems = [
 
 interface DashboardSidebarProps {
   className?: string
+  onClose?: () => void
 }
 
-export function DashboardSidebar({ className }: DashboardSidebarProps) {
+export function DashboardSidebar({ className, onClose }: DashboardSidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
 
@@ -70,11 +71,10 @@ export function DashboardSidebar({ className }: DashboardSidebarProps) {
       </Button>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-2 p-4">
-        {sidebarItems.map((item) => {
+      <nav className="flex-1 space-y-2 p-4">        {sidebarItems.map((item) => {
           const isActive = pathname === item.href
           return (
-            <Link key={item.href} href={item.href}>
+            <Link key={item.href} href={item.href} onClick={onClose}>
               <Button
                 variant={isActive ? "secondary" : "ghost"}
                 className={cn(

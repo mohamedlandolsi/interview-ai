@@ -1,91 +1,78 @@
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 
-// Extend the base Supabase User type with additional fields
-export interface User extends SupabaseUser {
-  // Add custom user fields here if you have them in your database
-  full_name?: string
-  avatar_url?: string
-  company_id?: string
-  role?: 'admin' | 'interviewer' | 'user'
+// User role enum to match database schema
+export type UserRole = 'admin' | 'hr_manager' | 'interviewer'
+
+// Notification preferences interface
+export interface NotificationPreferences {
+  email: boolean
+  push: boolean
+  sms: boolean
 }
 
-// Database types - Update these based on your actual database schema
+// Extend the base Supabase User type with additional fields
+export interface User extends SupabaseUser {
+  full_name?: string
+  avatar_url?: string
+  company_name?: string
+  role?: UserRole
+}
+
+// Database types - Updated to match the new schema
 export interface Database {
   public: {
-    Tables: {      profiles: {
+    Tables: {
+      profiles: {
         Row: {
           id: string
-          email: string
           full_name: string | null
-          avatar_url: string | null
-          company_id: string | null
           company_name: string | null
-          role: string | null
           department: string | null
           phone: string | null
-          timezone: string | null
-          notification_preferences: any | null // JSON field
+          role: UserRole
+          avatar_url: string | null
+          timezone: string
+          notification_preferences: NotificationPreferences
           onboarding_completed: boolean
           email_verified: boolean
-          last_login_at: string | null
+          interview_count: number
+          average_score: number
+          last_login: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id: string
-          email: string
           full_name?: string | null
-          avatar_url?: string | null
-          company_id?: string | null
           company_name?: string | null
-          role?: string | null
           department?: string | null
           phone?: string | null
-          timezone?: string | null
-          notification_preferences?: any | null
+          role?: UserRole
+          avatar_url?: string | null
+          timezone?: string
+          notification_preferences?: NotificationPreferences
           onboarding_completed?: boolean
           email_verified?: boolean
-          last_login_at?: string | null
+          interview_count?: number
+          average_score?: number
+          last_login?: string | null
           created_at?: string
-          updated_at?: string
-        }
+          updated_at?: string        }
         Update: {
           id?: string
-          email?: string
           full_name?: string | null
-          avatar_url?: string | null
-          company_id?: string | null
           company_name?: string | null
-          role?: string | null
           department?: string | null
           phone?: string | null
-          timezone?: string | null
-          notification_preferences?: any | null
+          role?: UserRole
+          avatar_url?: string | null
+          timezone?: string
+          notification_preferences?: NotificationPreferences
           onboarding_completed?: boolean
           email_verified?: boolean
-          last_login_at?: string | null
-          updated_at?: string
-        }
-      }
-      companies: {
-        Row: {
-          id: string
-          name: string
-          logo_url: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          logo_url?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          logo_url?: string | null
+          interview_count?: number
+          average_score?: number
+          last_login?: string | null
           updated_at?: string
         }
       }
@@ -185,16 +172,20 @@ export interface Database {
 
 // Helper types for working with database tables
 export type Profile = Database['public']['Tables']['profiles']['Row']
-export type Company = Database['public']['Tables']['companies']['Row']
 export type InterviewTemplate = Database['public']['Tables']['interview_templates']['Row']
 export type InterviewSession = Database['public']['Tables']['interview_sessions']['Row']
 
 // Insert and Update types
 export type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
 export type ProfileUpdate = Database['public']['Tables']['profiles']['Update']
-export type CompanyInsert = Database['public']['Tables']['companies']['Insert']
-export type CompanyUpdate = Database['public']['Tables']['companies']['Update']
 export type InterviewTemplateInsert = Database['public']['Tables']['interview_templates']['Insert']
 export type InterviewTemplateUpdate = Database['public']['Tables']['interview_templates']['Update']
 export type InterviewSessionInsert = Database['public']['Tables']['interview_sessions']['Insert']
 export type InterviewSessionUpdate = Database['public']['Tables']['interview_sessions']['Update']
+
+// Profile with computed fields (matches the database view)
+export interface ProfileView extends Profile {
+  email: string
+  activity_status: 'active' | 'inactive' | 'dormant'
+  days_since_signup: number
+}

@@ -25,6 +25,7 @@ interface AuthContextType {
   signInWithOAuth: (provider: 'google' | 'github' | 'linkedin') => Promise<{ error: AuthError | null }>
   signOut: () => Promise<{ error: AuthError | null }>
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>
+  resendVerification: (email: string) => Promise<{ error: AuthError | null }>
   updateProfile: (updates: Partial<Profile>) => Promise<{ error: any }>
   refreshProfile: () => Promise<void>
 }
@@ -41,6 +42,7 @@ const AuthContext = createContext<AuthContextType>({
   signInWithOAuth: async () => ({ error: null }),
   signOut: async () => ({ error: null }),
   resetPassword: async () => ({ error: null }),
+  resendVerification: async () => ({ error: null }),
   updateProfile: async () => ({ error: null }),
   refreshProfile: async () => {},
 })
@@ -66,7 +68,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [error, setError] = useState<AuthError | null>(null)
   const router = useRouter()
   const supabase = createClient()
-
   // Fetch user profile from database
   const fetchProfile = async (userId: string): Promise<Profile | null> => {
     try {
@@ -78,53 +79,67 @@ export function AuthProvider({ children }: AuthProviderProps) {
         .single()
 
       if (error) {
-        console.error('Error fetching profile:', error)
+        console.error('Error fetching profile:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          userId
+        })
         return null
       }
 
       return data
     } catch (error) {
-      console.error('Error fetching profile:', error)
+      console.error('Error fetching profile:', {
+        error,
+        userId,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error'
+      })
       return null
     } finally {
       setProfileLoading(false)
     }
-  }
-
-  // Create user profile in database
+  }  // Create user profile in database
   const createUserProfile = async (userId: string, email: string, metadata?: any): Promise<{ error: any }> => {
     try {
       const profileData = {
         id: userId,
         email: email,
         full_name: metadata?.full_name || null,
-        company_name: metadata?.company || null,
-        role: 'hr_manager', // Default role
-        onboarding_completed: false,
-        email_verified: false,
-        notification_preferences: {
-          email_notifications: true,
-          push_notifications: true,
-          interview_reminders: true,
-          weekly_reports: true,
-        },
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        company_name: metadata?.company_name || null,
+        job_title: metadata?.job_title || 'Not specified',
+        role: 'interviewer', // Default role matching database schema
+        phone: metadata?.phone || null,
+        timezone: 'UTC',
       }
 
+      // Use upsert to handle conflicts
       const { error } = await supabase
         .from('profiles')
-        .insert(profileData)
+        .upsert(profileData, { onConflict: 'id' })
 
       if (error) {
-        console.error('Error creating profile:', error)
+        console.error('Error creating profile:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          userId,
+          profileData
+        })
         return { error }
       }
 
       return { error: null }
     } catch (error) {
-      console.error('Error creating profile:', error)
+      console.error('Error creating profile:', {
+        error,
+        userId,
+        email,
+        metadata,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error'
+      })
       return { error }
     }
   }
@@ -341,6 +356,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
+  // Resend email verification
+  const resendVerification = async (email: string) => {
+    try {
+      setError(null)
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/verify-email`,
+        }
+      })
+      return { error }
+    } catch (err: any) {
+      const error = err as AuthError
+      setError(error)
+      return { error }
+    }
+  }
+
   // Update user profile
   const updateProfile = async (updates: Partial<Profile>) => {
     try {
@@ -379,6 +413,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signInWithOAuth,
     signOut,
     resetPassword,
+    resendVerification,
     updateProfile,
     refreshProfile,
   }

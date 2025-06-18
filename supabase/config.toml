@@ -1,0 +1,55 @@
+# Supabase Configuration
+# https://supabase.com/docs/reference/cli/config
+
+project_id = "your-project-id"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://localhost:3000"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+
+[auth.sms]
+enable_signup = false
+enable_confirmations = false
+
+[auth.external.google]
+enabled = false
+client_id = ""
+secret = ""
+
+[auth.external.github]
+enabled = false
+client_id = ""
+secret = ""
+
+[db]
+major_version = 15
+
+[realtime]
+enabled = true
+ip_version = "IPv4"
+
+[studio]
+enabled = true
+api_url = "http://127.0.0.1:54321"
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[functions]
+# Local function development settings

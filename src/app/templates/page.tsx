@@ -36,6 +36,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { DashboardLayout } from "@/components/Layout"
+import { DashboardRoute } from "@/components/auth/ProtectedRoute"
 
 // Mock data for templates
 const mockTemplates = [
@@ -219,22 +221,23 @@ export default function TemplatesPage() {
       />
     )
   }
-
   return (
-    <div className="space-y-6 p-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Interview Templates</h1>
-          <p className="text-muted-foreground">
-            Create and manage interview question templates for different roles
-          </p>
-        </div>
-        <Button onClick={handleCreateNew}>
-          <Plus className="w-4 h-4 mr-2" />
-          Create Template
-        </Button>
-      </div>
+    <DashboardRoute>
+      <DashboardLayout>
+        <div className="space-y-6">
+          {/* Page Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Interview Templates</h1>
+              <p className="text-muted-foreground">
+                Create and manage interview question templates for different roles
+              </p>
+            </div>
+            <Button onClick={handleCreateNew}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create Template
+            </Button>
+          </div>
 
       {/* Filters and Search */}
       <Card>
@@ -613,8 +616,7 @@ export default function TemplatesPage() {
             <p className="text-muted-foreground mb-4">
               Try adjusting your search or filter criteria
             </p>
-            <Button variant="outline" onClick={() => {
-              setSearchTerm("")
+            <Button variant="outline" onClick={() => {              setSearchTerm("")
               setCategoryFilter("All Categories")
               setDifficultyFilter("All Levels")
             }}>
@@ -623,6 +625,8 @@ export default function TemplatesPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+        </div>
+      </DashboardLayout>
+    </DashboardRoute>
   )
 }

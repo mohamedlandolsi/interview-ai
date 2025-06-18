@@ -36,8 +36,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { 
-  Plus, 
+import {   Plus, 
   Search, 
   Calendar, 
   Clock, 
@@ -51,6 +50,8 @@ import {
   RefreshCw,
   Eye
 } from "lucide-react"
+import { DashboardLayout } from "@/components/Layout"
+import { DashboardRoute } from "@/components/auth/ProtectedRoute"
 
 // Mock data
 const interviews = [
@@ -207,22 +208,23 @@ export default function InterviewsPage() {
     // Here you would implement the actual bulk actions
     setSelectedInterviews([])
   }
-
   return (
-    <div className="space-y-6 p-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Interviews</h1>
-          <p className="text-muted-foreground">
-            Manage and monitor all candidate interviews
-          </p>
-        </div>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          Create Interview
-        </Button>
-      </div>
+    <DashboardRoute>
+      <DashboardLayout>
+        <div className="space-y-6">
+          {/* Page Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Interviews</h1>
+              <p className="text-muted-foreground">
+                Manage and monitor all candidate interviews
+              </p>
+            </div>
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              Create Interview
+            </Button>
+          </div>
 
       {/* Filters and Search */}
       <Card>
@@ -502,8 +504,7 @@ export default function InterviewsPage() {
             <h3 className="text-lg font-semibold mb-2">No interviews found</h3>
             <p className="text-muted-foreground mb-4">
               Try adjusting your search or filter criteria
-            </p>
-            <Button variant="outline" onClick={() => {
+            </p>            <Button variant="outline" onClick={() => {
               setSearchTerm("")
               setStatusFilter("All Status")
               setPositionFilter("All Positions")
@@ -514,6 +515,8 @@ export default function InterviewsPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+        </div>
+      </DashboardLayout>
+    </DashboardRoute>
   )
 }

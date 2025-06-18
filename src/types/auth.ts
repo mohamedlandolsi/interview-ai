@@ -216,3 +216,26 @@ export interface AuthGuardConfig {
   redirectTo?: string
   fallback?: React.ReactNode
 }
+
+/**
+ * Dashboard layout props
+ */
+export interface DashboardLayoutProps {
+  children: React.ReactNode
+  className?: string
+}
+
+/**
+ * Dashboard header props
+ */
+export interface DashboardHeaderProps {
+  onMenuClick?: () => void
+}
+
+/**
+ * Dashboard sidebar props
+ */
+export interface DashboardSidebarProps {
+  className?: string
+  onClose?: () => void
+}

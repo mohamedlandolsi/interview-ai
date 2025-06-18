@@ -57,13 +57,25 @@ export default function LoginPage() {
       rememberMe: false,
     },
   })
-
   // Redirect if already authenticated
   useEffect(() => {
     if (user && !loading) {
       router.push(returnUrl)
     }
   }, [user, loading, router, returnUrl])
+
+  // Handle URL messages (e.g., from password reset, email verification)
+  useEffect(() => {
+    const message = searchParams.get('message')
+    const error = searchParams.get('error')
+    
+    if (message) {
+      setSuccessMessage(message)
+    }
+    if (error) {
+      setAuthError(error)
+    }
+  }, [searchParams])
 
   // Clear messages when form changes
   useEffect(() => {
@@ -152,9 +164,9 @@ export default function LoginPage() {
         <CardHeader className="space-y-1 text-center">
           <div className="flex items-center justify-center mb-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-              <span className="text-lg font-bold text-primary-foreground">AI</span>
+              <span className="text-lg font-bold text-primary-foreground">IQ</span>
             </div>
-            <span className="ml-2 text-2xl font-bold text-foreground">JobInterviewer</span>
+            <span className="ml-2 text-2xl font-bold text-foreground">InterQ</span>
           </div>
           <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
           <CardDescription>
@@ -182,21 +194,19 @@ export default function LoginPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
+                    <FormLabel>Email</FormLabel>                    <FormControl>
                       <Input
                         placeholder="Enter your email"
                         type="email"
                         {...field}
                         disabled={isLoading}
+                        autoComplete="email"
                       />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
-              />
-
-              <FormField
+              />              <FormField
                 control={form.control}
                 name="password"
                 render={({ field }) => (
@@ -209,6 +219,7 @@ export default function LoginPage() {
                           type={showPassword ? "text" : "password"}
                           {...field}
                           disabled={isLoading}
+                          autoComplete="current-password"
                         />
                         <Button
                           type="button"

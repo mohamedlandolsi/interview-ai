@@ -14,17 +14,21 @@ import {
   Bell, 
   CreditCard 
 } from 'lucide-react'
+import { DashboardLayout } from '@/components/Layout'
+import { DashboardRoute } from '@/components/auth/ProtectedRoute'
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('profile')
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground">
-          Manage your account settings and preferences.
-        </p>
-      </div>
+    <DashboardRoute>
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Settings</h1>
+            <p className="text-muted-foreground">
+              Manage your account settings and preferences.
+            </p>
+          </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-0">
@@ -62,14 +66,15 @@ export default function SettingsPage() {
           <IntegrationsSettings />
         </TabsContent>
 
-        <TabsContent value="notifications" className="space-y-4">
-          <NotificationsSettings />
+        <TabsContent value="notifications" className="space-y-4">          <NotificationsSettings />
         </TabsContent>
 
         <TabsContent value="billing" className="space-y-4">
           <BillingSettings />
         </TabsContent>
       </Tabs>
-    </div>
+        </div>
+      </DashboardLayout>
+    </DashboardRoute>
   )
 }
