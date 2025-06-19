@@ -87,13 +87,30 @@ export function useRequireAuth(options?: {
  */
 export function usePermissions() {
   const { user, profile } = useAuth()
+  
   const hasRole = (role: string): boolean => {
     return profile?.role === role
   }
+  
   const hasPermission = (permission: string): boolean => {
-    // In a real app, you'd check against user's actual permissions
-    // For now, we'll use role-based checks
-    if (!profile?.role) return false
+    // Debug logging in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Permission check:', { 
+        permission, 
+        profileRole: profile?.role, 
+        hasProfile: !!profile 
+      })
+    }
+
+    // If no profile or role, deny access
+    if (!profile?.role) {
+      console.warn('Access denied: No profile or role found', { 
+        hasProfile: !!profile, 
+        role: profile?.role,
+        requestedPermission: permission 
+      })
+      return false
+    }
 
     const rolePermissions: Record<string, string[]> = {
       admin: ['*'], // Admin has all permissions
@@ -121,7 +138,8 @@ export function usePermissions() {
       ],
       user: [
         'dashboard:access',
-        'results:read'
+        'results:read',
+        'templates:read' // Temporarily added to debug production issue
       ],
     }
 

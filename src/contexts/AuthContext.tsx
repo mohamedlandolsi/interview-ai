@@ -206,20 +206,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
             console.error('Failed to create user profile:', createError)
           }
         }
-        
-        // Update email verification status if verified
+          // Update email verification status if verified
         if (profileData && session.user.email_confirmed_at && !profileData.email_verified) {
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update({ 
-              email_verified: true,
-              updated_at: new Date().toISOString() 
+          try {
+            const response = await fetch('/api/profile', {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                email_verified: true
+              }),
             })
-            .eq('id', session.user.id)
-          
-          if (!updateError) {
-            // Refresh profile data to get updated verification status
-            profileData = await fetchProfile(session.user.id)
+            
+            if (response.ok) {
+              // Refresh profile data to get updated verification status
+              profileData = await fetchProfile(session.user.id)
+            }
+          } catch (error) {
+            console.error('Failed to update email verification status:', error)
           }
         }
         
