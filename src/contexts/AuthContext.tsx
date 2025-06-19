@@ -68,28 +68,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [error, setError] = useState<AuthError | null>(null)
   const router = useRouter()
   const supabase = createClient()
-  // Fetch user profile from database
+  
+  // Fetch user profile from database using Prisma
   const fetchProfile = async (userId: string): Promise<Profile | null> => {
     try {
       setProfileLoading(true)
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
+      
+      // Use our Prisma-based API route to fetch profile
+      const response = await fetch('/api/profile', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
 
-      if (error) {
-        console.error('Error fetching profile:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-          userId
-        })
-        return null
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Profile doesn't exist yet
+          return null
+        }
+        throw new Error(`Failed to fetch profile: ${response.status}`)
       }
 
-      return data
+      const data = await response.json()
+      return data.profile || null
+      
     } catch (error) {
       console.error('Error fetching profile:', {
         error,
@@ -100,44 +103,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setProfileLoading(false)
     }
-  }  // Create user profile in database
+  }
+
+  // Create user profile in database using Prisma
   const createUserProfile = async (userId: string, email: string, metadata?: any): Promise<{ error: any }> => {
     try {
       const profileData = {
-        id: userId,
-        email: email,
         full_name: metadata?.full_name || null,
         company_name: metadata?.company_name || null,
-        job_title: metadata?.job_title || 'Not specified',
         role: 'interviewer', // Default role matching database schema
-        phone: metadata?.phone || null,
-        timezone: 'UTC',
+      }      // Use our Prisma-based API route to create profile
+      const response = await fetch('/api/profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(profileData),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `Failed to create profile: ${response.status}`)
       }
 
-      // Use upsert to handle conflicts
-      const { error } = await supabase
-        .from('profiles')
-        .upsert(profileData, { onConflict: 'id' })
-
-      if (error) {
-        console.error('Error creating profile:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-          userId,
-          profileData
-        })
-        return { error }
-      }
-
+      const data = await response.json()
       return { error: null }
+      
     } catch (error) {
       console.error('Error creating profile:', {
         error,
         userId,
-        email,
-        metadata,
         errorMessage: error instanceof Error ? error.message : 'Unknown error'
       })
       return { error }
@@ -374,7 +369,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return { error }
     }
   }
-
   // Update user profile
   const updateProfile = async (updates: Partial<Profile>) => {
     try {
@@ -383,17 +377,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return { error: new Error('No user logged in') }
       }
 
-      const { error } = await supabase
-        .from('profiles')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', user.id)
+      // Use our Prisma-based API route to update profile
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      })
 
-      if (!error) {
-        // Refresh profile data
-        await refreshProfile()
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `Failed to update profile: ${response.status}`)
       }
 
-      return { error }
+      // Refresh profile data
+      await refreshProfile()
+
+      return { error: null }
     } catch (error) {
       return { error }
     } finally {

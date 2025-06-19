@@ -1,175 +1,67 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   Select, 
   SelectContent, 
   SelectItem, 
-  SelectTrigger,   SelectValue 
+  SelectTrigger, 
+  SelectValue 
 } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
 import { 
   Plus, 
-  Search, 
-  Copy, 
-  Trash2,
-  Edit3, 
-  Eye,
+  Search,
   FileText,
-  Clock,
-  Users,
-  Zap,
-  Star,
-  MoreHorizontal,
-  Play
+  Loader2,
+  AlertCircle
 } from "lucide-react"
 import { TemplateEditor } from "@/components/templates/TemplateEditor"
 import { TemplatePreview } from "@/components/templates/TemplatePreview"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { TemplateCard } from "@/components/templates/TemplateCard"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { DashboardLayout } from "@/components/Layout"
 import { DashboardRoute } from "@/components/auth/ProtectedRoute"
+import { useTemplates } from "@/hooks/useTemplates"
+import { useDebounce } from "../../hooks/useDebounce"
 
-// Mock data for templates
-const mockTemplates = [
-  {
-    id: "1",
-    name: "Frontend Developer Assessment",
-    description: "Comprehensive evaluation for frontend developers covering React, JavaScript, and UI/UX principles",
-    category: "Technical",
-    questions: 12,
-    duration: 45,
-    difficulty: "Intermediate",
-    usageCount: 156,
-    lastUsed: "2024-06-15",
-    isBuiltIn: false,
-    tags: ["React", "JavaScript", "CSS", "HTML"]
-  },
-  {
-    id: "2",
-    name: "Product Manager Interview",
-    description: "Strategic thinking and product management skills assessment",
-    category: "Leadership",
-    questions: 8,
-    duration: 60,
-    difficulty: "Advanced",
-    usageCount: 89,
-    lastUsed: "2024-06-14",
-    isBuiltIn: true,
-    tags: ["Strategy", "Analytics", "Leadership"]
-  },
-  {
-    id: "3",
-    name: "Backend Developer Technical",
-    description: "Server-side development skills including databases, APIs, and system design",
-    category: "Technical",
-    questions: 15,
-    duration: 50,
-    difficulty: "Advanced",
-    usageCount: 203,
-    lastUsed: "2024-06-16",
-    isBuiltIn: false,
-    tags: ["Node.js", "Database", "API Design"]
-  },
-  {
-    id: "4",
-    name: "Data Scientist Evaluation",
-    description: "Statistical analysis, machine learning, and data visualization skills",
-    category: "Technical",
-    questions: 10,
-    duration: 55,
-    difficulty: "Advanced",
-    usageCount: 67,
-    lastUsed: "2024-06-13",
-    isBuiltIn: true,
-    tags: ["Python", "Statistics", "ML"]
-  },
-  {
-    id: "5",
-    name: "UX Designer Assessment",
-    description: "Design thinking, user research, and prototyping skills evaluation",
-    category: "Creative",
-    questions: 9,
-    duration: 40,
-    difficulty: "Intermediate",
-    usageCount: 124,
-    lastUsed: "2024-06-17",
-    isBuiltIn: false,
-    tags: ["Design", "Research", "Prototyping"]
-  },
-  {
-    id: "6",
-    name: "Sales Representative Interview",
-    description: "Communication skills, sales methodology, and customer relationship management",
-    category: "Sales",
-    questions: 7,
-    duration: 35,
-    difficulty: "Beginner",
-    usageCount: 91,
-    lastUsed: "2024-06-12",
-    isBuiltIn: true,
-    tags: ["Communication", "Sales", "CRM"]
-  }
-]
-
-const categories = ["All Categories", "Technical", "Leadership", "Creative", "Sales", "Customer Service"]
+const categories = ["All Categories", "Technical", "Leadership", "Creative", "Sales", "Customer Service", "General"]
 const difficulties = ["All Levels", "Beginner", "Intermediate", "Advanced"]
 
-const getDifficultyBadge = (difficulty: string) => {
-  switch (difficulty) {
-    case "Beginner":
-      return <Badge variant="secondary" className="bg-green-100 text-green-800">Beginner</Badge>
-    case "Intermediate":
-      return <Badge variant="default" className="bg-blue-100 text-blue-800">Intermediate</Badge>
-    case "Advanced":
-      return <Badge variant="warning" className="bg-orange-100 text-orange-800">Advanced</Badge>
-    default:
-      return <Badge variant="outline">{difficulty}</Badge>
-  }
-}
-
-const getCategoryIcon = (category: string) => {
-  switch (category) {
-    case "Technical":
-      return <Zap className="w-4 h-4" />
-    case "Leadership":
-      return <Users className="w-4 h-4" />
-    case "Creative":
-      return <Star className="w-4 h-4" />
-    case "Sales":
-      return <FileText className="w-4 h-4" />
-    default:
-      return <FileText className="w-4 h-4" />
-  }
-}
-
 export default function TemplatesPage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [categoryFilter, setCategoryFilter] = useState("All Categories")
-  const [difficultyFilter, setDifficultyFilter] = useState("All Levels")
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [isPreviewing, setIsPreviewing] = useState(false)
+  const [activeTab, setActiveTab] = useState("all")
+  const [localSearchTerm, setLocalSearchTerm] = useState("")
 
-  // Filter templates
-  const filteredTemplates = mockTemplates.filter(template => {
-    const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         template.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         template.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
-    const matchesCategory = categoryFilter === "All Categories" || template.category === categoryFilter
-    const matchesDifficulty = difficultyFilter === "All Levels" || template.difficulty === difficultyFilter
-    
-    return matchesSearch && matchesCategory && matchesDifficulty
-  })
+  // Use the templates hook
+  const {
+    templates,
+    loading,
+    error,
+    filters,
+    setFilters,
+    refreshTemplates,
+    deleteTemplate,
+    duplicateTemplate
+  } = useTemplates()
+
+  // Debounce search term to avoid too many API calls
+  const debouncedSearchTerm = useDebounce(localSearchTerm, 300)
+
+  // Update filters when debounced search term changes
+  useEffect(() => {
+    setFilters({ search: debouncedSearchTerm })
+  }, [debouncedSearchTerm, setFilters])
+
+  // Update filters when tab changes
+  useEffect(() => {
+    setFilters({ type: activeTab as 'all' | 'custom' | 'library' })
+  }, [activeTab, setFilters])
 
   const handleEditTemplate = (templateId: string) => {
     setSelectedTemplate(templateId)
@@ -183,14 +75,17 @@ export default function TemplatesPage() {
     setIsEditing(false)
   }
 
-  const handleDuplicateTemplate = (templateId: string) => {
-    console.log("Duplicating template:", templateId)
-    // Implement duplication logic
+  const handleDuplicateTemplate = async (templateId: string) => {
+    const duplicated = await duplicateTemplate(templateId)
+    if (duplicated) {
+      console.log("Template duplicated successfully")
+    }
   }
-
-  const handleDeleteTemplate = (templateId: string) => {
-    console.log("Deleting template:", templateId)
-    // Implement deletion logic
+  const handleDeleteTemplate = async (templateId: string) => {
+    const deleted = await deleteTemplate(templateId)
+    if (deleted) {
+      console.log("Template deleted successfully")
+    }
   }
 
   const handleCreateNew = () => {
@@ -199,12 +94,35 @@ export default function TemplatesPage() {
     setIsPreviewing(false)
   }
 
+  const handleCategoryChange = (category: string) => {
+    setFilters({ category })
+  }
+
+  const handleDifficultyChange = (difficulty: string) => {
+    setFilters({ difficulty })
+  }
+
+  const clearAllFilters = () => {
+    setLocalSearchTerm("")
+    setFilters({ 
+      search: "", 
+      category: "All Categories", 
+      difficulty: "All Levels" 
+    })
+  }
+
   if (isEditing) {
     return (
       <TemplateEditor
         templateId={selectedTemplate}
-        onBack={() => setIsEditing(false)}
-        onSave={() => setIsEditing(false)}
+        onBack={() => {
+          setIsEditing(false)
+          refreshTemplates() // Refresh templates when coming back from editor
+        }}
+        onSave={() => {
+          setIsEditing(false)
+          refreshTemplates() // Refresh templates after saving
+        }}
       />
     )
   }
@@ -221,6 +139,7 @@ export default function TemplatesPage() {
       />
     )
   }
+
   return (
     <DashboardRoute>
       <DashboardLayout>
@@ -239,392 +158,124 @@ export default function TemplatesPage() {
             </Button>
           </div>
 
-      {/* Filters and Search */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                <Input
-                  placeholder="Search templates, descriptions, or tags..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+          {/* Error Alert */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Filters and Search */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col lg:flex-row gap-4">
+                {/* Search */}
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                    <Input
+                      placeholder="Search templates, descriptions, or tags..."
+                      value={localSearchTerm}
+                      onChange={(e) => setLocalSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                
+                {/* Filters */}
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Select value={filters.category} onValueChange={handleCategoryChange}>
+                    <SelectTrigger className="w-full sm:w-[160px]">
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map(category => (
+                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={filters.difficulty} onValueChange={handleDifficultyChange}>
+                    <SelectTrigger className="w-full sm:w-[140px]">
+                      <SelectValue placeholder="Difficulty" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {difficulties.map(difficulty => (
+                        <SelectItem key={difficulty} value={difficulty}>{difficulty}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </div>
-            
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-full sm:w-[160px]">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map(category => (
-                    <SelectItem key={category} value={category}>{category}</SelectItem>
+            </CardContent>
+          </Card>
+
+          {/* Templates Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="all">All Templates</TabsTrigger>
+              <TabsTrigger value="custom">My Templates</TabsTrigger>
+              <TabsTrigger value="library">Template Library</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value={activeTab} className="space-y-4">
+              {/* Loading State */}
+              {loading && (
+                <div className="flex items-center justify-center py-12">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                    <span>Loading templates...</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Empty State */}
+              {!loading && templates.length === 0 && (
+                <div className="text-center py-12">
+                  <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No templates found</h3>
+                  <p className="text-muted-foreground mb-4">
+                    {activeTab === 'custom' 
+                      ? "You haven't created any templates yet."
+                      : activeTab === 'library'
+                      ? "No library templates available."
+                      : "No templates match your current filters."
+                    }
+                  </p>
+                  <div className="flex gap-2 justify-center">
+                    {activeTab === 'custom' && (
+                      <Button onClick={handleCreateNew}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Create Your First Template
+                      </Button>
+                    )}
+                    {(localSearchTerm || filters.category !== 'All Categories' || filters.difficulty !== 'All Levels') && (
+                      <Button variant="outline" onClick={clearAllFilters}>
+                        Clear Filters
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Template Grid */}
+              {!loading && templates.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {templates.map((template) => (
+                    <TemplateCard
+                      key={template.id}
+                      template={template}
+                      onPreview={handlePreviewTemplate}
+                      onEdit={handleEditTemplate}
+                      onDuplicate={handleDuplicateTemplate}
+                      onDelete={handleDeleteTemplate}
+                    />
                   ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={difficultyFilter} onValueChange={setDifficultyFilter}>
-                <SelectTrigger className="w-full sm:w-[140px]">
-                  <SelectValue placeholder="Difficulty" />
-                </SelectTrigger>
-                <SelectContent>
-                  {difficulties.map(difficulty => (
-                    <SelectItem key={difficulty} value={difficulty}>{difficulty}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Templates Tabs */}
-      <Tabs defaultValue="all" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="all">All Templates</TabsTrigger>
-          <TabsTrigger value="custom">My Templates</TabsTrigger>
-          <TabsTrigger value="library">Template Library</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="space-y-4">
-          {/* Template Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredTemplates.map((template) => (
-              <Card key={template.id} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      {getCategoryIcon(template.category)}
-                      <div>
-                        <CardTitle className="text-lg">{template.name}</CardTitle>
-                        <CardDescription className="text-sm mt-1">
-                          {template.description}
-                        </CardDescription>
-                      </div>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handlePreviewTemplate(template.id)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          Preview
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleEditTemplate(template.id)}>
-                          <Edit3 className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDuplicateTemplate(template.id)}>
-                          <Copy className="mr-2 h-4 w-4" />
-                          Duplicate
-                        </DropdownMenuItem>
-                        {!template.isBuiltIn && (
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteTemplate(template.id)}
-                            className="text-red-600"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{template.category}</span>
-                    {getDifficultyBadge(template.difficulty)}
-                  </div>
-                  
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <FileText className="w-4 h-4" />
-                      <span>{template.questions} questions</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-4 h-4" />
-                      <span>{template.duration} min</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>Used {template.usageCount} times</span>
-                    {template.isBuiltIn && (
-                      <Badge variant="outline" className="text-xs">
-                        Built-in
-                      </Badge>
-                    )}
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {template.tags.slice(0, 3).map(tag => (
-                      <Badge key={tag} variant="secondary" className="text-xs">
-                        {tag}
-                      </Badge>
-                    ))}
-                    {template.tags.length > 3 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{template.tags.length - 3}
-                      </Badge>
-                    )}
-                  </div>
-
-                  <Separator />
-                  
-                  <div className="flex justify-between pt-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => handlePreviewTemplate(template.id)}
-                    >
-                      <Play className="w-4 h-4 mr-1" />
-                      Preview
-                    </Button>
-                    <Button 
-                      size="sm"
-                      onClick={() => handleEditTemplate(template.id)}
-                    >
-                      <Edit3 className="w-4 h-4 mr-1" />
-                      Edit
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="custom" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredTemplates.filter(t => !t.isBuiltIn).map((template) => (
-              <Card key={template.id} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      {getCategoryIcon(template.category)}
-                      <div>
-                        <CardTitle className="text-lg">{template.name}</CardTitle>
-                        <CardDescription className="text-sm mt-1">
-                          {template.description}
-                        </CardDescription>
-                      </div>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handlePreviewTemplate(template.id)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          Preview
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleEditTemplate(template.id)}>
-                          <Edit3 className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDuplicateTemplate(template.id)}>
-                          <Copy className="mr-2 h-4 w-4" />
-                          Duplicate
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => handleDeleteTemplate(template.id)}
-                          className="text-red-600"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{template.category}</span>
-                    {getDifficultyBadge(template.difficulty)}
-                  </div>
-                  
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <FileText className="w-4 h-4" />
-                      <span>{template.questions} questions</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-4 h-4" />
-                      <span>{template.duration} min</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>Used {template.usageCount} times</span>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {template.tags.slice(0, 3).map(tag => (
-                      <Badge key={tag} variant="secondary" className="text-xs">
-                        {tag}
-                      </Badge>
-                    ))}
-                    {template.tags.length > 3 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{template.tags.length - 3}
-                      </Badge>
-                    )}
-                  </div>
-
-                  <Separator />
-                  
-                  <div className="flex justify-between pt-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => handlePreviewTemplate(template.id)}
-                    >
-                      <Play className="w-4 h-4 mr-1" />
-                      Preview
-                    </Button>
-                    <Button 
-                      size="sm"
-                      onClick={() => handleEditTemplate(template.id)}
-                    >
-                      <Edit3 className="w-4 h-4 mr-1" />
-                      Edit
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="library" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredTemplates.filter(t => t.isBuiltIn).map((template) => (
-              <Card key={template.id} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      {getCategoryIcon(template.category)}
-                      <div>
-                        <CardTitle className="text-lg">{template.name}</CardTitle>
-                        <CardDescription className="text-sm mt-1">
-                          {template.description}
-                        </CardDescription>
-                      </div>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handlePreviewTemplate(template.id)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          Preview
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDuplicateTemplate(template.id)}>
-                          <Copy className="mr-2 h-4 w-4" />
-                          Use Template
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{template.category}</span>
-                    {getDifficultyBadge(template.difficulty)}
-                  </div>
-                  
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <FileText className="w-4 h-4" />
-                      <span>{template.questions} questions</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-4 h-4" />
-                      <span>{template.duration} min</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>Used {template.usageCount} times</span>
-                    <Badge variant="outline" className="text-xs">
-                      Built-in
-                    </Badge>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {template.tags.slice(0, 3).map(tag => (
-                      <Badge key={tag} variant="secondary" className="text-xs">
-                        {tag}
-                      </Badge>
-                    ))}
-                    {template.tags.length > 3 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{template.tags.length - 3}
-                      </Badge>
-                    )}
-                  </div>
-
-                  <Separator />
-                  
-                  <div className="flex justify-between pt-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => handlePreviewTemplate(template.id)}
-                    >
-                      <Play className="w-4 h-4 mr-1" />
-                      Preview
-                    </Button>
-                    <Button 
-                      size="sm"
-                      onClick={() => handleDuplicateTemplate(template.id)}
-                    >
-                      <Copy className="w-4 h-4 mr-1" />
-                      Use Template
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      {/* Empty State */}
-      {filteredTemplates.length === 0 && (
-        <Card className="text-center py-12">
-          <CardContent>
-            <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
-              <Search className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2">No templates found</h3>
-            <p className="text-muted-foreground mb-4">
-              Try adjusting your search or filter criteria
-            </p>
-            <Button variant="outline" onClick={() => {              setSearchTerm("")
-              setCategoryFilter("All Categories")
-              setDifficultyFilter("All Levels")
-            }}>
-              Clear Filters
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </div>
       </DashboardLayout>
     </DashboardRoute>

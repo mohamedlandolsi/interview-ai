@@ -1,0 +1,105 @@
+// This is your Prisma schema file for AI Job Interviewer
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Enums
+enum UserRole {
+  admin
+  hr_manager
+  interviewer
+}
+
+enum InterviewStatus {
+  scheduled
+  in_progress
+  completed
+  cancelled
+}
+
+// User profiles table - extends Supabase auth.users
+model Profile {
+  id                      String   @id @db.Uuid
+  full_name               String?
+  company_name            String?
+  department              String?
+  phone                   String?
+  role                    UserRole @default(interviewer)
+  avatar_url              String?
+  timezone                String   @default("UTC")
+  notification_preferences Json     @default("{\"email\": true, \"push\": true, \"sms\": false}")
+  onboarding_completed    Boolean  @default(false)
+  email_verified          Boolean  @default(false)
+  interview_count         Int      @default(0)
+  average_score           Float    @default(0.0)
+  last_login              DateTime?
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+
+  // Relations
+  interview_templates     InterviewTemplate[]
+  interview_sessions      InterviewSession[]
+
+  @@map("profiles")
+}
+
+// Interview templates
+model InterviewTemplate {
+  id           String   @id @default(cuid()) @db.VarChar(30)
+  title        String   // Template name/title
+  name         String?  // Alias for title (for compatibility)
+  description  String?
+  category     String?  // Template category (Technical, Leadership, etc.)
+  difficulty   String?  // Beginner, Intermediate, Advanced
+  duration     Int?     // Duration in minutes
+  tags         String[] // Array of tags
+  questions    Json     // Array of question objects (legacy field)
+  rawQuestions Json?    // New structured questions format
+  company_id   String   @db.Uuid
+  created_by   String   @db.Uuid
+  usage_count  Int      @default(0) // How many times template was used
+  last_used    DateTime? // When template was last used
+  is_built_in  Boolean  @default(false) // Whether it's a built-in template
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  // Relations
+  creator      Profile            @relation(fields: [created_by], references: [id], onDelete: Cascade)
+  sessions     InterviewSession[]
+
+  @@map("interview_templates")
+}
+
+// Interview sessions
+model InterviewSession {
+  id               String           @id @default(cuid()) @db.VarChar(30)
+  candidate_name   String
+  candidate_email  String
+  position         String
+  template_id      String           @db.VarChar(30)
+  interviewer_id   String           @db.Uuid
+  status           InterviewStatus  @default(scheduled)
+  overall_score    Float?
+  metrics          Json?            // Performance metrics
+  transcript       String?          // Interview transcript
+  ai_insights      String[]         // AI-generated insights
+  duration         Int?             // Duration in minutes
+  started_at       DateTime?
+  completed_at     DateTime?
+  created_at       DateTime         @default(now())
+  updated_at       DateTime         @updatedAt
+
+  // Relations
+  template         InterviewTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  interviewer      Profile           @relation(fields: [interviewer_id], references: [id], onDelete: Cascade)
+
+  @@map("interview_sessions")
+}

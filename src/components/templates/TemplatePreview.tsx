@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
   ArrowLeft, 
   Play, 
@@ -19,8 +20,11 @@ import {
   Edit3,
   Users,
   FileText,
-  Timer
+  Timer,
+  Loader2,
+  AlertCircle
 } from "lucide-react"
+import { useTemplates } from "@/hooks/useTemplates"
 
 type Question = {
   id: string
@@ -45,99 +49,127 @@ export function TemplatePreview({ templateId, onBack, onEdit }: TemplatePreviewP
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [timeLeft, setTimeLeft] = useState(0)
+  const [template, setTemplate] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   
-  // Mock template data
-  const template = {
-    id: templateId,
-    name: "Frontend Developer Assessment",
-    description: "Comprehensive evaluation for frontend developers covering React, JavaScript, and UI/UX principles",
-    category: "Technical",
-    difficulty: "Intermediate",
-    totalTime: 45,
-    totalPoints: 100,
-    questions: [
-      {
-        id: "1",
-        type: "text" as const,
-        title: "Describe your experience with React and its ecosystem",
-        description: "Please provide details about your React development experience, including any libraries or tools you've used",
-        required: true,
-        timeLimit: 5,
-        points: 20
-      },
-      {
-        id: "2",
-        type: "multiple_choice" as const,
-        title: "Which of the following are React hooks?",
-        description: "Select all that apply",
-        required: true,
-        points: 15,
-        options: ["useState", "useEffect", "useContext", "useComponent", "useCallback"]
-      },
-      {
-        id: "3",
-        type: "rating" as const,
-        title: "How would you rate your JavaScript proficiency?",
-        description: "Rate your comfort level with modern JavaScript features",
-        required: false,
-        points: 10,
-        minRating: 1,
-        maxRating: 5
-      },
-      {
-        id: "4",
-        type: "boolean" as const,
-        title: "Have you worked with TypeScript in production?",
-        description: "Answer yes if you have professional TypeScript experience",
-        required: true,
-        points: 5
-      },
-      {
-        id: "5",
-        type: "text" as const,
-        title: "Explain the difference between server-side and client-side rendering",
-        description: "Provide a technical explanation with examples",
-        required: true,
-        timeLimit: 8,
-        points: 25
-      },
-      {
-        id: "6",
-        type: "multiple_choice" as const,
-        title: "Which CSS methodologies have you used?",
-        description: "Select all that apply to your experience",
-        required: false,
-        points: 10,
-        options: ["BEM", "SMACSS", "OOCSS", "Atomic CSS", "CSS Modules"]
+  const { getTemplate } = useTemplates()
+  
+  // Load template data
+  useEffect(() => {
+    const loadTemplate = async () => {
+      setLoading(true)
+      setError(null)
+      
+      try {
+        const fetchedTemplate = await getTemplate(templateId)
+        if (fetchedTemplate) {
+          setTemplate({
+            ...fetchedTemplate,
+            questions: fetchedTemplate.rawQuestions || []
+          })
+        } else {
+          setError("Template not found")
+        }
+      } catch (err) {
+        setError("Failed to load template")
+        console.error("Error loading template:", err)
+      } finally {
+        setLoading(false)
       }
-    ]
+    }
+
+    loadTemplate()
+  }, [templateId, getTemplate])
+
+  // Timer effect for question time limits
+  useEffect(() => {
+    if (template && template.questions && template.questions.length > 0) {
+      const currentQ = template.questions[currentQuestion]
+      if (isPlaying && currentQ?.timeLimit) {
+        setTimeLeft(currentQ.timeLimit * 60) // Convert to seconds
+        const timer = setInterval(() => {
+          setTimeLeft(prev => {
+            if (prev <= 1) {
+              setIsPlaying(false)
+              return 0
+            }
+            return prev - 1
+          })
+        }, 1000)
+        return () => clearInterval(timer)
+      }
+    }
+  }, [isPlaying, currentQuestion, template])
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Loading template...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error state
+  if (error || !template) {
+    return (
+      <div className="space-y-6 p-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" onClick={onBack}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Templates
+          </Button>
+        </div>        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error || "Template not found"}</AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+  // Handle empty questions
+  if (!template.questions || template.questions.length === 0) {
+    return (
+      <div className="space-y-6 p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={onBack}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Templates
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold">{template.name}</h1>
+              <p className="text-muted-foreground">{template.description}</p>
+            </div>
+          </div>
+          <Button onClick={onEdit}>
+            <Edit3 className="w-4 h-4 mr-2" />
+            Edit Template
+          </Button>
+        </div>
+        
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            This template doesn't have any questions yet. Click "Edit Template" to add some questions.
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
   }
 
   const currentQ = template.questions[currentQuestion]
-  const progress = ((currentQuestion + 1) / template.questions.length) * 100
-
-  useEffect(() => {
-    if (isPlaying && currentQ?.timeLimit) {
-      setTimeLeft(currentQ.timeLimit * 60) // Convert to seconds
-      const timer = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            setIsPlaying(false)
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-      return () => clearInterval(timer)
-    }
-  }, [isPlaying, currentQuestion, currentQ?.timeLimit])
+  const progress = template.questions.length > 0 ? ((currentQuestion + 1) / template.questions.length) * 100 : 0
+  const totalPoints = template.questions.reduce((sum: number, q: any) => sum + (q.points || 0), 0)
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
-
   const nextQuestion = () => {
     if (currentQuestion < template.questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1)
@@ -154,7 +186,7 @@ export function TemplatePreview({ templateId, onBack, onEdit }: TemplatePreviewP
     }
   }
 
-  const renderQuestionPreview = (question: Question) => {
+  const renderQuestionPreview = (question: any) => {
     switch (question.type) {
       case "text":
         return (
@@ -335,14 +367,13 @@ export function TemplatePreview({ templateId, onBack, onEdit }: TemplatePreviewP
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Difficulty:</span>
                 <Badge variant="secondary">{template.difficulty}</Badge>
-              </div>
-              <div className="flex justify-between text-sm">
+              </div>              <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total Time:</span>
-                <span className="font-medium">{template.totalTime} min</span>
+                <span className="font-medium">{template.duration || 0} min</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total Points:</span>
-                <span className="font-medium">{template.totalPoints}</span>
+                <span className="font-medium">{totalPoints}</span>
               </div>
             </CardContent>
           </Card>

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Template API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .result { background: #f5f5f5; padding: 10px; margin: 10px 0; max-height: 400px; overflow: auto; }
+        button { padding: 10px 20px; margin: 5px; }
+        pre { background: #f0f0f0; padding: 10px; overflow: auto; font-size: 12px; }
+        .template-card { border: 1px solid #ddd; margin: 10px 0; padding: 15px; }
+        .questions { margin-top: 10px; }
+        .question { background: #fff; border: 1px solid #eee; margin: 5px 0; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Template Preview & Editor Test</h1>
+    
+    <div class="section">
+        <h2>Test API Endpoints</h2>
+        <button onclick="testGetTemplates()">Test GET /api/templates</button>
+        <button onclick="testGetTemplate('cmc3vp3ck0001f4ro00vtiqra')">Test GET Template #1</button>
+        <button onclick="testGetTemplate('cmc3vp3l20003f4ro0ki8h7zm')">Test GET Template #2</button>
+        <button onclick="testGetTemplate('cmc3vp3t60005f4ro1u2nczll')">Test GET Template #3</button>
+        <div id="apiResults" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>Formatted Template Preview</h2>
+        <div id="formattedResults" class="result"></div>
+    </div>
+
+    <script>
+        let currentTemplate = null;
+
+        async function testGetTemplates() {
+            try {
+                const response = await fetch('/api/templates?type=all');
+                const data = await response.json();
+                document.getElementById('apiResults').innerHTML = 
+                    '<h3>All Templates Response:</h3><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                
+                if (data.templates && data.templates.length > 0) {
+                    showFormattedTemplate(data.templates[0]);
+                }
+            } catch (error) {
+                document.getElementById('apiResults').innerHTML = 
+                    '<h3>Error:</h3><pre>' + error.message + '</pre>';
+            }
+        }
+
+        async function testGetTemplate(id) {
+            try {
+                const response = await fetch(`/api/templates/${id}`);
+                const data = await response.json();
+                document.getElementById('apiResults').innerHTML = 
+                    '<h3>Single Template Response:</h3><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                
+                if (data.template) {
+                    showFormattedTemplate(data.template);
+                }
+            } catch (error) {
+                document.getElementById('apiResults').innerHTML = 
+                    '<h3>Error:</h3><pre>' + error.message + '</pre>';
+            }
+        }
+
+        function showFormattedTemplate(template) {
+            currentTemplate = template;
+            const questionsData = template.rawQuestions || template.questions || [];
+            const questionCount = Array.isArray(questionsData) ? questionsData.length : 0;
+            
+            let html = `
+                <div class="template-card">
+                    <h3>${template.name || template.title}</h3>
+                    <p><strong>Description:</strong> ${template.description || 'No description'}</p>
+                    <p><strong>Category:</strong> ${template.category || 'No category'}</p>
+                    <p><strong>Difficulty:</strong> ${template.difficulty || 'No difficulty'}</p>
+                    <p><strong>Duration:</strong> ${template.duration || 'No duration'} minutes</p>
+                    <p><strong>Tags:</strong> ${template.tags ? template.tags.join(', ') : 'No tags'}</p>
+                    <p><strong>Questions:</strong> ${questionCount} questions</p>
+                    
+                    <div class="questions">
+                        <h4>Questions Preview:</h4>
+            `;
+            
+            if (Array.isArray(questionsData) && questionsData.length > 0) {
+                questionsData.forEach((q, index) => {
+                    html += `
+                        <div class="question">
+                            <h5>Question ${index + 1}: ${q.title || q.text || 'No title'}</h5>
+                            <p><strong>Type:</strong> ${q.type}</p>
+                            <p><strong>Description:</strong> ${q.description || 'No description'}</p>
+                            <p><strong>Required:</strong> ${q.required ? 'Yes' : 'No'}</p>
+                            <p><strong>Points:</strong> ${q.points || 0}</p>
+                            <p><strong>Time Limit:</strong> ${q.timeLimit || 'No limit'} minutes</p>
+                            ${q.options ? `<p><strong>Options:</strong> ${q.options.join(', ')}</p>` : ''}
+                            ${q.minRating && q.maxRating ? `<p><strong>Rating Range:</strong> ${q.minRating} to ${q.maxRating}</p>` : ''}
+                        </div>
+                    `;
+                });
+            } else {
+                html += '<p>No questions available</p>';
+            }
+            
+            html += `
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('formattedResults').innerHTML = html;
+        }
+
+        // Test on page load
+        window.onload = function() {
+            testGetTemplates();
+        };
+    </script>
+</body>
+</html>

@@ -50,6 +50,8 @@ interface SortableItemProps {
 
 export function SortableItem({ id, question, index, onUpdate, onRemove }: SortableItemProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isDirty, setIsDirty] = useState(false)
+  
   const {
     attributes,
     listeners,
@@ -61,6 +63,15 @@ export function SortableItem({ id, question, index, onUpdate, onRemove }: Sortab
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+  }
+
+  // Mark as dirty when any field changes
+  const handleUpdate = (updates: Partial<Question>) => {
+    setIsDirty(true)
+    onUpdate(id, updates)
+    
+    // Clear dirty state after a short delay to show visual feedback
+    setTimeout(() => setIsDirty(false), 1000)
   }
 
   const getQuestionTypeIcon = (type: string) => {
@@ -83,10 +94,9 @@ export function SortableItem({ id, question, index, onUpdate, onRemove }: Sortab
         </div>
     }
   }
-
   const addOption = () => {
     if (question.options) {
-      onUpdate(id, { options: [...question.options, ""] })
+      handleUpdate({ options: [...question.options, ""] })
     }
   }
 
@@ -94,20 +104,31 @@ export function SortableItem({ id, question, index, onUpdate, onRemove }: Sortab
     if (question.options) {
       const newOptions = [...question.options]
       newOptions[optionIndex] = value
-      onUpdate(id, { options: newOptions })
+      handleUpdate({ options: newOptions })
     }
   }
 
   const removeOption = (optionIndex: number) => {
     if (question.options && question.options.length > 1) {
       const newOptions = question.options.filter((_, i) => i !== optionIndex)
-      onUpdate(id, { options: newOptions })
+      handleUpdate({ options: newOptions })
+    }
+  }
+  const handleDelete = () => {
+    if (window.confirm(`Are you sure you want to delete this question? This action cannot be undone.`)) {
+      onRemove(id)
     }
   }
 
   return (
     <div ref={setNodeRef} style={style}>
-      <Card className="border-l-4 border-l-blue-500">
+      <Card className={`border-l-4 transition-all duration-200 ${
+        isDirty 
+          ? 'border-l-green-500 shadow-md' 
+          : isExpanded 
+            ? 'border-l-blue-500 shadow-sm' 
+            : 'border-l-gray-300'
+      }`}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -131,12 +152,12 @@ export function SortableItem({ id, question, index, onUpdate, onRemove }: Sortab
                 onClick={() => setIsExpanded(!isExpanded)}
               >
                 {isExpanded ? "Collapse" : "Expand"}
-              </Button>
-              <Button
+              </Button>              <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => onRemove(id)}
-                className="text-red-600 hover:text-red-700"
+                onClick={handleDelete}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                title="Delete question"
               >
                 <Trash2 className="w-4 h-4" />
               </Button>
@@ -164,14 +185,13 @@ export function SortableItem({ id, question, index, onUpdate, onRemove }: Sortab
 
         {isExpanded && (
           <CardContent className="space-y-4">
-            <div className="space-y-4">
-              <div>
+            <div className="space-y-4">              <div>
                 <Label htmlFor={`title-${id}`}>Question Title</Label>
                 <Input
                   id={`title-${id}`}
                   placeholder="Enter your question..."
                   value={question.title}
-                  onChange={(e) => onUpdate(id, { title: e.target.value })}
+                  onChange={(e) => handleUpdate({ title: e.target.value })}
                 />
               </div>
 
@@ -181,7 +201,7 @@ export function SortableItem({ id, question, index, onUpdate, onRemove }: Sortab
                   id={`description-${id}`}
                   placeholder="Add additional context or instructions..."
                   value={question.description}
-                  onChange={(e) => onUpdate(id, { description: e.target.value })}
+                  onChange={(e) => handleUpdate({ description: e.target.value })}
                   rows={2}
                 />
               </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -38,11 +38,23 @@ import {
   Star,
   Save,
   Eye,
-  Copy
+  Copy,
+  Loader2
 } from "lucide-react"
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { SortableItem } from "@/components/templates/SortableItem"
+import { useTemplates } from "@/hooks/useTemplates"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+
+// Debounce utility function
+function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout)
+    timeout = setTimeout(() => func(...args), wait)
+  }
+}
 
 const templateSchema = z.object({
   name: z.string().min(1, "Template name is required"),
@@ -77,6 +89,11 @@ interface TemplateEditorProps {
 export function TemplateEditor({ templateId, onBack, onSave }: TemplateEditorProps) {
   const [questions, setQuestions] = useState<Question[]>([])
   const [activeTab, setActiveTab] = useState("details")
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const { createTemplate, updateTemplate, getTemplate } = useTemplates()
+  
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -95,41 +112,50 @@ export function TemplateEditor({ templateId, onBack, onSave }: TemplateEditorPro
       tags: "",
     },
   })
-
   useEffect(() => {
-    if (templateId) {
-      // Load existing template data
-      // This would typically fetch from an API
-      form.setValue("name", "Frontend Developer Assessment")
-      form.setValue("description", "Comprehensive evaluation for frontend developers")
-      form.setValue("category", "Technical")
-      form.setValue("difficulty", "Intermediate")
-      form.setValue("timeLimit", 45)
-      form.setValue("tags", "React, JavaScript, CSS, HTML")
-      
-      setQuestions([
-        {
-          id: "1",
-          type: "text",
-          title: "Describe your experience with React",
-          description: "Please provide details about your React development experience",
-          required: true,
-          timeLimit: 5,
-          points: 10
-        },
-        {
-          id: "2",
-          type: "multiple_choice",
-          title: "Which of the following are React hooks?",
-          description: "Select all that apply",
-          required: true,
-          points: 15,
-          options: ["useState", "useEffect", "useContext", "useComponent"]
+    const loadTemplate = async () => {
+      if (templateId) {
+        setLoading(true)
+        setError(null)
+        
+        try {
+          const template = await getTemplate(templateId)
+          if (template) {
+            // Populate form with existing template data
+            form.setValue("name", template.name)
+            form.setValue("description", template.description || "")
+            form.setValue("category", template.category || "")
+            form.setValue("difficulty", template.difficulty || "")
+            form.setValue("timeLimit", template.duration || 45)
+            form.setValue("tags", template.tags?.join(", ") || "")
+            
+            // Set questions if available
+            if (template.rawQuestions && Array.isArray(template.rawQuestions)) {
+              setQuestions(template.rawQuestions.map((q: any, index: number) => ({
+                id: q.id || `question-${index}`,
+                type: q.type || "text",
+                title: q.title || q.question || "",
+                description: q.description || "",
+                required: q.required || false,
+                timeLimit: q.timeLimit || 3,
+                points: q.points || q.weight || 10,
+                options: q.options || (q.type === "multiple_choice" ? [""] : undefined),
+                minRating: q.minRating || (q.type === "rating" ? 1 : undefined),
+                maxRating: q.maxRating || (q.type === "rating" ? 5 : undefined)
+              })))
+            }
+          }
+        } catch (err) {
+          setError("Failed to load template")
+          console.error("Error loading template:", err)
+        } finally {
+          setLoading(false)
         }
-      ])
+      }
     }
-  }, [templateId, form])
 
+    loadTemplate()
+  }, [templateId, form, getTemplate])
   const addQuestion = (type: Question["type"]) => {
     const newQuestion: Question = {
       id: Date.now().toString(),
@@ -142,16 +168,31 @@ export function TemplateEditor({ templateId, onBack, onSave }: TemplateEditorPro
       ...(type === "rating" && { minRating: 1, maxRating: 5 })
     }
     setQuestions([...questions, newQuestion])
+    
+    // Auto-save when adding questions if we have a templateId (editing existing template)
+    if (templateId) {
+      // Use setTimeout to ensure the state is updated before saving
+      setTimeout(() => debouncedSaveQuestions(), 100)
+    }
   }
-
   const updateQuestion = (id: string, updates: Partial<Question>) => {
     setQuestions(questions.map(q => q.id === id ? { ...q, ...updates } : q))
+    
+    // Auto-save when updating questions if we have a templateId (editing existing template)
+    if (templateId) {
+      debouncedSaveQuestions()
+    }
   }
 
   const removeQuestion = (id: string) => {
     setQuestions(questions.filter(q => q.id !== id))
+    
+    // Auto-save when removing questions if we have a templateId (editing existing template)
+    if (templateId) {
+      debouncedSaveQuestions()
+    }
   }
-
+  
   const handleDragEnd = (event: any) => {
     const { active, over } = event
     if (active.id !== over.id) {
@@ -160,23 +201,125 @@ export function TemplateEditor({ templateId, onBack, onSave }: TemplateEditorPro
         const newIndex = items.findIndex((item) => item.id === over.id)
         return arrayMove(items, oldIndex, newIndex)
       })
+      
+      // Auto-save when reordering questions if we have a templateId (editing existing template)
+      if (templateId) {
+        debouncedSaveQuestions()
+      }
     }
   }
 
-  const onSubmit = (data: TemplateFormData) => {
-    console.log("Template data:", { ...data, questions })
-    onSave()
-  }
+  // Debounced function to save questions to prevent too many API calls
+  const debouncedSaveQuestions = useCallback(
+    debounce(async () => {
+      if (!templateId) return
 
+      try {
+        const questionsData = questions.map(q => ({
+          id: q.id,
+          type: q.type,
+          question: q.title,
+          title: q.title,
+          description: q.description,
+          required: q.required,
+          timeLimit: q.timeLimit,
+          points: q.points,
+          weight: q.points / 10,
+          ...(q.options && { options: q.options.filter(opt => opt.trim() !== "") }),
+          ...(q.minRating && { minRating: q.minRating }),
+          ...(q.maxRating && { maxRating: q.maxRating }),
+          category: form.getValues("category"),
+          difficulty: form.getValues("difficulty")
+        }))
+
+        await updateTemplate(templateId, { rawQuestions: questionsData })
+      } catch (err) {
+        console.error("Error auto-saving questions:", err)
+      }
+    }, 1000),
+    [templateId, questions, updateTemplate, form]
+  )
+
+  const onSubmit = async (data: TemplateFormData) => {
+    setSaving(true)
+    setError(null)
+
+    try {
+      // Convert questions to the format expected by the API
+      const questionsData = questions.map(q => ({
+        id: q.id,
+        type: q.type,
+        question: q.title,
+        title: q.title,
+        description: q.description,
+        required: q.required,
+        timeLimit: q.timeLimit,
+        points: q.points,
+        weight: q.points / 10, // Convert points to weight
+        ...(q.options && { options: q.options.filter(opt => opt.trim() !== "") }),
+        ...(q.minRating && { minRating: q.minRating }),
+        ...(q.maxRating && { maxRating: q.maxRating }),
+        // Add category and difficulty from template data
+        category: data.category,
+        difficulty: data.difficulty
+      }))
+
+      const templateData = {
+        name: data.name,
+        description: data.description,
+        category: data.category,
+        difficulty: data.difficulty as "Beginner" | "Intermediate" | "Advanced",
+        duration: data.timeLimit,
+        tags: data.tags.split(',').map(tag => tag.trim()).filter(tag => tag !== ''),
+        rawQuestions: questionsData
+      }
+
+      let result
+      if (templateId) {
+        // Update existing template
+        result = await updateTemplate(templateId, templateData)
+      } else {
+        // Create new template
+        result = await createTemplate(templateData)
+      }
+
+      if (result) {
+        // If creating a new template, automatically go to questions tab
+        if (!templateId) {
+          setActiveTab("questions")
+        }
+        onSave()
+      } else {
+        setError(templateId ? "Failed to update template" : "Failed to create template")
+      }
+    } catch (err) {
+      setError("An error occurred while saving the template")
+      console.error("Error saving template:", err)
+    } finally {
+      setSaving(false)
+    }
+  }
   const totalPoints = questions.reduce((sum, q) => sum + q.points, 0)
   const estimatedTime = questions.reduce((sum, q) => sum + (q.timeLimit || 3), 0)
+
+  // Show loading state while fetching existing template
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Loading template...</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={onBack}>
+          <Button variant="ghost" size="sm" onClick={onBack} disabled={saving}>
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Templates
           </Button>
@@ -190,16 +333,33 @@ export function TemplateEditor({ templateId, onBack, onSave }: TemplateEditorPro
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button variant="outline" disabled={saving}>
             <Eye className="w-4 h-4 mr-2" />
             Preview
           </Button>
-          <Button onClick={form.handleSubmit(onSubmit)}>
-            <Save className="w-4 h-4 mr-2" />
-            Save Template
+          <Button 
+            onClick={form.handleSubmit(onSubmit)} 
+            disabled={saving}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save Template
+              </>
+            )}
           </Button>
         </div>
-      </div>
+      </div>      {/* Error Alert */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Main Content */}
