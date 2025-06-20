@@ -104,7 +104,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setProfileLoading(false)
     }
   }
-
   // Create user profile in database using Prisma
   const createUserProfile = async (userId: string, email: string, metadata?: any): Promise<{ error: any }> => {
     try {
@@ -112,7 +111,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         full_name: metadata?.full_name || null,
         company_name: metadata?.company_name || null,
         role: 'interviewer', // Default role matching database schema
-      }      // Use our Prisma-based API route to create profile
+      }
+      
+      console.log('🔄 Creating profile via API:', { userId, email, profileData })
+      
+      // Use our Prisma-based API route to create profile
       const response = await fetch('/api/profile', {
         method: 'POST',
         headers: {
@@ -121,16 +124,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
         body: JSON.stringify(profileData),
       })
 
+      console.log('📡 Profile creation API response:', response.status, response.statusText)
+
       if (!response.ok) {
         const errorData = await response.json()
+        console.error('❌ Profile creation API error:', errorData)
         throw new Error(errorData.error || `Failed to create profile: ${response.status}`)
       }
 
       const data = await response.json()
+      console.log('✅ Profile creation API success:', data)
       return { error: null }
       
     } catch (error) {
-      console.error('Error creating profile:', {
+      console.error('❌ Error creating profile:', {
         error,
         userId,
         errorMessage: error instanceof Error ? error.message : 'Unknown error'
@@ -189,10 +196,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         
         // Fetch or create profile data when user signs in
         let profileData = await fetchProfile(session.user.id)
-        
-        // If no profile exists, create one (for new users or after email verification)
+          // If no profile exists, create one (for new users or after email verification)
         if (!profileData && session.user.email) {
-          console.log('Creating new user profile...')
+          console.log('🔄 No profile found, creating new user profile...', {
+            userId: session.user.id,
+            email: session.user.email,
+            emailVerified: !!session.user.email_confirmed_at
+          })
           const { error: createError } = await createUserProfile(
             session.user.id,
             session.user.email,
@@ -200,11 +210,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
           )
           
           if (!createError) {
+            console.log('✅ Profile creation successful, fetching new profile...')
             // Fetch the newly created profile
             profileData = await fetchProfile(session.user.id)
+            if (profileData) {
+              console.log('✅ Profile fetched successfully:', profileData.role)
+            } else {
+              console.error('❌ Profile creation succeeded but fetch failed')
+            }
           } else {
-            console.error('Failed to create user profile:', createError)
+            console.error('❌ Failed to create user profile:', createError)
           }
+        } else if (profileData) {
+          console.log('✅ Profile found:', profileData.role)
+        } else {
+          console.log('ℹ️ No profile creation needed (no email or already exists)')
         }
           // Update email verification status if verified
         if (profileData && session.user.email_confirmed_at && !profileData.email_verified) {
