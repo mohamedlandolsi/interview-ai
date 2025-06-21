@@ -177,9 +177,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     getInitialSession()    // Listen for auth changes
     const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session?.user?.email)
+      data: { subscription },    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🔐 Auth state changed:', event, session?.user?.email, 'Current path:', window.location.pathname)
 
       setSession(session)
       setError(null)
@@ -234,14 +233,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setProfile(null)
       }
 
-      setLoading(false)
-
-      // Handle different auth events
-      switch (event) {
-        case 'SIGNED_IN':
-          // Redirect to dashboard after successful sign in
-          if (session?.user && session.user.email_confirmed_at) {
+      setLoading(false)      // Handle different auth events
+      switch (event) {        case 'SIGNED_IN':
+          // Only redirect on actual sign-in (not session restoration)
+          // Check if this is coming from a login page or if there's no current pathname
+          const currentPath = window.location.pathname
+          const isOnAuthPage = ['/login', '/register', '/forgot-password', '/reset-password'].includes(currentPath)
+          const isOnHomePage = currentPath === '/'
+          
+          console.log('SIGNED_IN event - currentPath:', currentPath, 'isOnAuthPage:', isOnAuthPage, 'isOnHomePage:', isOnHomePage)
+          
+          // Only redirect if we're on an auth page or home page AND user is confirmed
+          if (session?.user && session.user.email_confirmed_at && (isOnAuthPage || isOnHomePage)) {
+            console.log('Redirecting to dashboard from SIGNED_IN event')
             router.push('/dashboard')
+          } else {
+            console.log('Not redirecting - either not on auth page or user not confirmed')
           }
           break
         case 'SIGNED_OUT':
@@ -249,7 +256,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           router.push('/login')
           break
         case 'TOKEN_REFRESHED':
-          // Session was refreshed
+          // Session was refreshed - don't redirect
           break
         case 'USER_UPDATED':
           // User data was updated, refresh profile
