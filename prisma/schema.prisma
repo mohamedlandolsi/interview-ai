@@ -94,6 +94,34 @@ model InterviewSession {
   duration         Int?             // Duration in minutes
   started_at       DateTime?
   completed_at     DateTime?
+
+  // Vapi Integration Fields
+  vapi_call_id     String?          // Vapi call identifier
+  vapi_assistant_id String?         // Vapi assistant used
+  vapi_cost        Float?           // Call cost from Vapi
+  vapi_cost_breakdown Json?         // Detailed cost breakdown
+  recording_url    String?          // Audio recording URL
+  stereo_recording_url String?      // Stereo recording URL
+  final_transcript String?          // Final processed transcript
+  conversation_summary String?      // AI-generated summary
+  real_time_messages Json[]         // Real-time transcript messages
+
+  // Vapi Analysis Results
+  vapi_summary     Json?            // Summary with Q&A pairs
+  vapi_success_evaluation Json?     // Success evaluation with score
+  vapi_structured_data Json?        // Extracted structured data
+  analysis_score   Float?           // Overall AI-generated score (0-100)
+  analysis_feedback String?         // AI feedback text
+  strengths        String[]         // Identified strengths
+  areas_for_improvement String[]    // Areas for improvement
+  question_scores  Json?            // Individual question scores
+  
+  // Enhanced Analysis Fields
+  category_scores  Json?            // Category-specific scores (communication, technical, etc.)
+  hiring_recommendation String?     // Strong Yes/Yes/Maybe/No
+  key_insights     String[]         // Key insights from analysis
+  interview_metrics Json?           // Engagement, clarity, completeness metrics
+
   created_at       DateTime         @default(now())
   updated_at       DateTime         @updatedAt
 

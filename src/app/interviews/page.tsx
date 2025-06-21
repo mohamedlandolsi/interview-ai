@@ -219,11 +219,16 @@ export default function InterviewsPage() {
               <p className="text-muted-foreground">
                 Manage and monitor all candidate interviews
               </p>
+            </div>            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => window.location.href = '/interviews/demo'}>
+                <Play className="w-4 h-4 mr-2" />
+                Demo Interview
+              </Button>
+              <Button onClick={() => window.location.href = '/interviews/conduct'}>
+                <Plus className="w-4 h-4 mr-2" />
+                Start Live Interview
+              </Button>
             </div>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Create Interview
-            </Button>
           </div>
 
       {/* Filters and Search */}

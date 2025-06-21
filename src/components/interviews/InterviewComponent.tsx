@@ -1,0 +1,306 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useVapi } from '@/hooks/useVapi';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Slider } from '@/components/ui/slider';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { 
+  Phone, 
+  PhoneOff, 
+  Mic, 
+  MicOff, 
+  Volume2, 
+  Clock,
+  AlertCircle,
+  Loader2
+} from 'lucide-react';
+
+interface InterviewComponentProps {
+  templateId?: string;
+  assistantId?: string;
+  candidateName?: string;
+  position?: string;
+  templateQuestions?: string[];
+  useEnhancedAnalysis?: boolean;
+  onInterviewStart?: () => void;
+  onInterviewEnd?: (duration: number) => void;
+  onError?: (error: string) => void;
+}
+
+export const InterviewComponent: React.FC<InterviewComponentProps> = ({
+  templateId,
+  assistantId,
+  candidateName,
+  position,
+  templateQuestions,
+  useEnhancedAnalysis = true,
+  onInterviewStart,
+  onInterviewEnd,
+  onError
+}) => {
+  const { 
+    callState, 
+    startCall, 
+    startInterviewCall,
+    endCall, 
+    toggleMute, 
+    isMuted, 
+    volume, 
+    setVolume 
+  } = useVapi();
+
+  const [lastDuration, setLastDuration] = useState<number>(0);
+
+  // Format duration as MM:SS
+  const formatDuration = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+  // Handle call state changes
+  useEffect(() => {
+    switch (callState.status) {
+      case 'connected':
+        onInterviewStart?.();
+        break;
+      case 'disconnected':
+        if (callState.duration > 0) {
+          setLastDuration(callState.duration);
+          onInterviewEnd?.(callState.duration);
+        }
+        break;
+      case 'error':
+        if (callState.error) {
+          onError?.(callState.error);
+        }
+        break;
+    }
+  }, [callState.status, callState.duration, callState.error]); // Remove callback functions from dependencies
+  const handleStartInterview = async () => {
+    try {
+      // Use enhanced analysis if candidate name and position are provided
+      if (useEnhancedAnalysis && candidateName && position) {
+        await startInterviewCall(candidateName, position, templateQuestions);
+      } else {
+        await startCall(assistantId);
+      }
+    } catch (error) {
+      console.error('Failed to start interview:', error);
+    }
+  };
+
+  const handleEndInterview = () => {
+    endCall();
+  };
+
+  const getStatusBadgeVariant = () => {
+    switch (callState.status) {
+      case 'connecting':
+        return 'secondary';
+      case 'connected':
+        return 'default';
+      case 'disconnected':
+        return 'outline';
+      case 'error':
+        return 'destructive';
+      default:
+        return 'outline';
+    }
+  };
+
+  const getStatusText = () => {
+    switch (callState.status) {
+      case 'idle':
+        return 'Ready to start';
+      case 'connecting':
+        return 'Connecting...';
+      case 'connected':
+        return 'Interview in progress';
+      case 'disconnected':
+        return 'Interview ended';
+      case 'error':
+        return 'Error occurred';
+      default:
+        return 'Unknown status';
+    }
+  };
+
+  return (
+    <Card className="w-full max-w-2xl mx-auto">
+      <CardHeader className="text-center">
+        <CardTitle className="flex items-center justify-center gap-2">
+          <Phone className="w-5 h-5" />
+          AI Job Interview
+        </CardTitle>
+        <div className="flex items-center justify-center gap-2">
+          <Badge variant={getStatusBadgeVariant()}>
+            {getStatusText()}
+          </Badge>
+          {callState.status === 'connecting' && (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          )}
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-6">
+        {/* Error Display */}
+        {callState.error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{callState.error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Call Duration */}
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-2 text-2xl font-mono font-bold">
+            <Clock className="w-5 h-5" />
+            {formatDuration(callState.duration)}
+          </div>
+          {lastDuration > 0 && callState.status === 'disconnected' && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Last interview duration: {formatDuration(lastDuration)}
+            </p>
+          )}
+        </div>
+
+        {/* Call Controls */}
+        <div className="flex justify-center gap-4">
+          {!callState.isActive ? (
+            <Button
+              onClick={handleStartInterview}
+              disabled={callState.status === 'connecting'}
+              size="lg"
+              className="gap-2"
+            >
+              {callState.status === 'connecting' ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <Phone className="w-4 h-4" />
+                  Start Interview
+                </>
+              )}
+            </Button>
+          ) : (
+            <>
+              <Button
+                onClick={handleEndInterview}
+                variant="destructive"
+                size="lg"
+                className="gap-2"
+              >
+                <PhoneOff className="w-4 h-4" />
+                End Interview
+              </Button>
+              <Button
+                onClick={toggleMute}
+                variant={isMuted ? "destructive" : "outline"}
+                size="lg"
+                className="gap-2"
+              >
+                {isMuted ? (
+                  <>
+                    <MicOff className="w-4 h-4" />
+                    Unmute
+                  </>
+                ) : (
+                  <>
+                    <Mic className="w-4 h-4" />
+                    Mute
+                  </>
+                )}
+              </Button>
+            </>
+          )}
+        </div>
+
+        {/* Volume Control */}
+        {!callState.isActive && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Volume2 className="w-4 h-4" />
+              Volume: {Math.round(volume * 100)}%
+            </div>
+            <Slider
+              value={[volume * 100]}
+              onValueChange={(value) => setVolume(value[0] / 100)}
+              max={100}
+              min={0}
+              step={5}
+              className="w-full"
+            />
+          </div>
+        )}
+
+        {/* Instructions */}
+        {callState.status === 'idle' && (
+          <div className="bg-muted p-4 rounded-lg">
+            <h4 className="font-medium mb-2">Interview Instructions:</h4>
+            <ul className="text-sm text-muted-foreground space-y-1">
+              <li>• Ensure you have a quiet environment</li>
+              <li>• Test your microphone and speakers</li>
+              <li>• Speak clearly and at a normal pace</li>
+              <li>• You can mute/unmute during the interview</li>
+              <li>• Click "End Interview" when you're finished</li>
+            </ul>
+          </div>
+        )}
+
+        {/* Active Call Info */}
+        {callState.isActive && (
+          <div className="bg-green-50 dark:bg-green-950 p-4 rounded-lg border border-green-200 dark:border-green-800">
+            <div className="flex items-center gap-2 text-green-800 dark:text-green-200">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="font-medium">Interview is live</span>
+            </div>
+            <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+              The AI interviewer is listening. Speak naturally and answer the questions.
+            </p>
+          </div>
+        )}
+
+        {/* Post-Interview Actions */}
+        {callState.status === 'disconnected' && lastDuration > 0 && (
+          <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+            <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">
+              Interview Completed!
+            </h4>
+            <p className="text-sm text-blue-700 dark:text-blue-300 mb-3">
+              Your interview lasted {formatDuration(lastDuration)}. 
+              You can view your results or start a new interview.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => window.location.href = '/results'}
+                variant="outline"
+                size="sm"
+              >
+                View Results
+              </Button>
+              <Button
+                onClick={handleStartInterview}
+                size="sm"
+              >
+                Start New Interview
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Template Info */}
+        {templateId && (
+          <div className="text-xs text-muted-foreground text-center">
+            Interview Template ID: {templateId}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
