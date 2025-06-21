@@ -4,15 +4,20 @@ import { VapiAssistantService } from '@/lib/vapi-assistant-service'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    console.log('🔧 Vapi assistant request body:', JSON.stringify(body, null, 2))
+    
     const { candidateName, position, templateQuestions, companyName, interviewType } = body
 
     if (!candidateName || !position) {
+      console.error('❌ Missing required fields:', { candidateName, position })
       return NextResponse.json(
         { error: 'Candidate name and position are required' },
         { status: 400 }
       )
     }
 
+    console.log('🎯 Creating assistant with VapiAssistantService...')
+    
     // Create a new assistant with enhanced configuration
     const assistant = await VapiAssistantService.createInterviewAssistant({
       candidateName,
@@ -21,6 +26,8 @@ export async function POST(request: NextRequest) {
       companyName,
       interviewType
     })
+
+    console.log('✅ Assistant created successfully:', assistant.id)
 
     return NextResponse.json({
       success: true,
@@ -32,9 +39,18 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error creating Vapi assistant:', error)
+    console.error('❌ Error creating Vapi assistant:', error)
+    console.error('❌ Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    })
+    
     return NextResponse.json(
-      { error: 'Failed to create assistant' },
+      { 
+        error: 'Failed to create assistant',
+        details: error.message || 'Unknown error'
+      },
       { status: 500 }
     )
   }

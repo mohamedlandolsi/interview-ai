@@ -1,20 +1,20 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Calendar, Search, Filter, Download, Eye, Clock, User, Star, ChevronDown, ChevronUp } from 'lucide-react'
+import { Calendar, Search, Filter, Download, Eye, Clock, User, Star, ChevronDown, ChevronUp, Loader2, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 import { ResultsDetailView } from '@/components/results/ResultsDetailView'
 import { AnalyticsDashboard } from '@/components/results/AnalyticsDashboard'
 import { DashboardLayout } from '@/components/Layout'
 import { DashboardRoute } from '@/components/auth/ProtectedRoute'
 
-// Export functions (simplified for now)
+// Export functions
 const exportToPDF = (results: any[], filename: string) => {
   console.log('Exporting to PDF:', filename, results.length, 'results')
   // TODO: Implement actual PDF export
@@ -26,7 +26,7 @@ const exportToCSV = (results: any[], filename: string) => {
     result.candidateName,
     result.candidateEmail,
     result.position,
-    format(result.interviewDate, 'yyyy-MM-dd'),
+    format(new Date(result.interviewDate), 'yyyy-MM-dd'),
     result.duration.toString(),
     result.overallScore.toString(),
     result.status
@@ -36,7 +36,7 @@ const exportToCSV = (results: any[], filename: string) => {
     headers.join(','),
     ...csvData.map(row => row.join(','))
   ].join('\n')
-
+  
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   const url = URL.createObjectURL(blob)
@@ -49,126 +49,109 @@ const exportToCSV = (results: any[], filename: string) => {
   document.body.removeChild(link)
 }
 
-// Mock data - replace with actual API data
-const mockInterviewResults = [
-  {
-    id: '1',
-    candidateName: 'John Smith',
-    candidateEmail: 'john.smith@email.com',
-    position: 'Senior Software Engineer',
-    interviewDate: new Date('2024-06-15'),
-    duration: 45,
-    overallScore: 85,
-    status: 'completed',
-    metrics: {
-      technical: 88,
-      communication: 82,
-      problemSolving: 87,
-      culturalFit: 83
-    },
-    transcriptPreview: 'Can you tell me about your experience with React and TypeScript? Well, I have been working with React for about 4 years now...',
-    aiInsights: ['Strong technical background', 'Excellent problem-solving approach', 'Good communication skills'],
-    competencyScores: {
-      'Technical Skills': 88,
-      'Communication': 82,
-      'Problem Solving': 87,
-      'Leadership': 78,
-      'Cultural Fit': 83,
-      'Adaptability': 85
-    }
-  },
-  {
-    id: '2',
-    candidateName: 'Sarah Johnson',
-    candidateEmail: 'sarah.johnson@email.com',
-    position: 'Product Manager',
-    interviewDate: new Date('2024-06-14'),
-    duration: 50,
-    overallScore: 92,
-    status: 'completed',
-    metrics: {
-      technical: 85,
-      communication: 95,
-      problemSolving: 90,
-      culturalFit: 94
-    },
-    transcriptPreview: 'How do you prioritize features in a product roadmap? I use a combination of user research, business impact analysis...',
-    aiInsights: ['Exceptional leadership qualities', 'Strategic thinking', 'Strong stakeholder management'],
-    competencyScores: {
-      'Technical Skills': 85,
-      'Communication': 95,
-      'Problem Solving': 90,
-      'Leadership': 94,
-      'Cultural Fit': 94,
-      'Adaptability': 88
-    }
-  },
-  {
-    id: '3',
-    candidateName: 'Mike Davis',
-    candidateEmail: 'mike.davis@email.com',
-    position: 'UX Designer',
-    interviewDate: new Date('2024-06-13'),
-    duration: 40,
-    overallScore: 78,
-    status: 'completed',
-    metrics: {
-      technical: 80,
-      communication: 75,
-      problemSolving: 82,
-      culturalFit: 76
-    },
-    transcriptPreview: 'Can you walk me through your design process? I typically start with user research and personas...',
-    aiInsights: ['Creative problem solver', 'User-focused approach', 'Could improve presentation skills'],
-    competencyScores: {
-      'Technical Skills': 80,
-      'Communication': 75,
-      'Problem Solving': 82,
-      'Leadership': 70,
-      'Cultural Fit': 76,
-      'Adaptability': 79
-    }
-  }
-]
-
 export default function ResultsPage() {
+  const [interviewResults, setInterviewResults] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [positionFilter, setPositionFilter] = useState('all')
   const [scoreFilter, setScoreFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('all')
   const [selectedResult, setSelectedResult] = useState<any>(null)
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
+  
+  // Pagination state
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0
+  })
 
-  // Filter and search logic
+  // Fetch interview results from API
+  const fetchResults = async (page: number = 1) => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const searchParams = new URLSearchParams({
+        page: page.toString(),
+        limit: pagination.limit.toString(),
+        ...(searchTerm && { search: searchTerm }),
+        ...(positionFilter !== 'all' && { position: positionFilter }),
+        ...(scoreFilter !== 'all' && { 
+          scoreMin: scoreFilter === 'excellent' ? '90' : scoreFilter === 'good' ? '80' : scoreFilter === 'average' ? '70' : '0',
+          scoreMax: scoreFilter === 'excellent' ? '100' : scoreFilter === 'good' ? '89' : scoreFilter === 'average' ? '79' : '69'
+        })
+      })
+
+      const response = await fetch(`/api/interviews/results/list?${searchParams}`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch results')
+      }
+
+      const data = await response.json()
+      
+      if (data.success) {
+        setInterviewResults(data.results)
+        setPagination(data.pagination)
+      } else {
+        throw new Error(data.error || 'Failed to fetch results')
+      }
+    } catch (err) {
+      console.error('Error fetching results:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch results')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Initial data load
+  useEffect(() => {
+    fetchResults()
+  }, [])
+
+  // Refetch when filters change (with debounce)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (!loading) {
+        fetchResults(1)
+      }
+    }, 500)
+    return () => clearTimeout(timeoutId)
+  }, [searchTerm, positionFilter, scoreFilter])
+
+  // Client-side date filtering (since it's complex to do server-side)
   const filteredResults = useMemo(() => {
-    return mockInterviewResults.filter(result => {
-      const matchesSearch = result.candidateName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           result.candidateEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           result.position.toLowerCase().includes(searchTerm.toLowerCase())
+    return interviewResults.filter(result => {
+      if (dateFilter === 'all') return true
       
-      const matchesPosition = positionFilter === 'all' || result.position === positionFilter
+      const resultDate = new Date(result.interviewDate)
+      const now = new Date()
       
-      const matchesScore = scoreFilter === 'all' || 
-                          (scoreFilter === 'excellent' && result.overallScore >= 90) ||
-                          (scoreFilter === 'good' && result.overallScore >= 80 && result.overallScore < 90) ||
-                          (scoreFilter === 'average' && result.overallScore >= 70 && result.overallScore < 80) ||
-                          (scoreFilter === 'poor' && result.overallScore < 70)
-      
-      const matchesDate = dateFilter === 'all' ||
-                         (dateFilter === 'today' && format(result.interviewDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')) ||
-                         (dateFilter === 'week' && result.interviewDate >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)) ||
-                         (dateFilter === 'month' && result.interviewDate >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
-      
-      return matchesSearch && matchesPosition && matchesScore && matchesDate
+      switch (dateFilter) {
+        case 'today':
+          return resultDate.toDateString() === now.toDateString()
+        case 'week':
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+          return resultDate >= weekAgo
+        case 'month':
+          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+          return resultDate >= monthAgo
+        default:
+          return true
+      }
     })
-  }, [searchTerm, positionFilter, scoreFilter, dateFilter])
+  }, [interviewResults, dateFilter])
 
-  const uniquePositions = [...new Set(mockInterviewResults.map(r => r.position))]
+  const uniquePositions = [...new Set(filteredResults.map(r => r.position))]
+  
   const getScoreColor = (score: number) => {
-    if (score >= 90) return 'text-green-600 bg-green-50 dark:text-green-400 dark:bg-green-950'
-    if (score >= 80) return 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-950'
-    if (score >= 70) return 'text-yellow-600 bg-yellow-50 dark:text-yellow-400 dark:bg-yellow-950'
-    return 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950'
+    if (score >= 90) return 'text-green-600'
+    if (score >= 80) return 'text-blue-600'
+    if (score >= 70) return 'text-yellow-600'
+    return 'text-red-600'
   }
 
   const getScoreBadgeVariant = (score: number) => {
@@ -178,258 +161,395 @@ export default function ResultsPage() {
     return 'destructive'
   }
 
-  const toggleCardExpansion = (id: string) => {
-    const newExpanded = new Set(expandedCards)
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id)
-    } else {
-      newExpanded.add(id)
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case 'completed': return 'default'
+      case 'in_progress': return 'secondary'
+      case 'scheduled': return 'outline'
+      case 'cancelled': return 'destructive'
+      default: return 'outline'
     }
-    setExpandedCards(newExpanded)
   }
 
-  const handleExportPDF = () => {
-    exportToPDF(filteredResults, 'interview-results')
+  const toggleCardExpansion = (id: string) => {
+    setExpandedCards(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(id)) {
+        newSet.delete(id)
+      } else {
+        newSet.add(id)
+      }
+      return newSet
+    })
   }
 
-  const handleExportCSV = () => {
-    exportToCSV(filteredResults, 'interview-results')
+  const formatDate = (dateString: string) => {
+    try {
+      return format(new Date(dateString), 'MMM dd, yyyy')
+    } catch {
+      return 'Unknown date'
+    }
   }
 
-  const handleExportSingle = (result: any) => {
-    exportToPDF([result], `${result.candidateName}-results`)
+  if (error) {
+    return (
+      <DashboardRoute>
+        <DashboardLayout>
+          <div className="container mx-auto p-6">
+            <div className="text-center">
+              <h1 className="text-3xl font-bold mb-4 text-red-600">Error Loading Results</h1>
+              <p className="text-gray-600 mb-4">{error}</p>
+              <Button onClick={() => fetchResults()}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Try Again
+              </Button>
+            </div>
+          </div>
+        </DashboardLayout>
+      </DashboardRoute>
+    )
   }
+
   return (
     <DashboardRoute>
       <DashboardLayout>
-        <div className="space-y-6">
-          {/* Header */}
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">Interview Results</h1>
-              <p className="text-muted-foreground mt-1">Review and analyze interview performance data</p>
-            </div>
-            <div className="flex gap-2">
-              <AnalyticsDashboard results={filteredResults} />
-              <Button variant="outline" onClick={handleExportCSV}>
-                <Download className="h-4 w-4 mr-2" />
-                Export CSV
-              </Button>
-              <Button onClick={handleExportPDF}>
-                <Download className="h-4 w-4 mr-2" />
-                Export PDF
-              </Button>
-            </div>
+        <div className="p-6">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold mb-2">Interview Results</h1>
+            <p className="text-gray-600">
+              View and analyze results from all interview sessions
+            </p>
           </div>
 
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filters & Search
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search candidates..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            
-            <Select value={positionFilter} onValueChange={setPositionFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Positions" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Positions</SelectItem>
-                {uniquePositions.map(position => (
-                  <SelectItem key={position} value={position}>{position}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={scoreFilter} onValueChange={setScoreFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Scores" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Scores</SelectItem>
-                <SelectItem value="excellent">Excellent (90+)</SelectItem>
-                <SelectItem value="good">Good (80-89)</SelectItem>
-                <SelectItem value="average">Average (70-79)</SelectItem>
-                <SelectItem value="poor">Poor (&lt;70)</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={dateFilter} onValueChange={setDateFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Dates" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Dates</SelectItem>
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="week">This Week</SelectItem>
-                <SelectItem value="month">This Month</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Analytics Dashboard */}
+          <div className="mb-8">
+            <AnalyticsDashboard results={filteredResults} />
           </div>
-        </CardContent>
-      </Card>      {/* Results Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{filteredResults.length}</div>
-            <div className="text-sm text-muted-foreground">Total Interviews</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-              {Math.round(filteredResults.reduce((acc, r) => acc + r.overallScore, 0) / filteredResults.length || 0)}
-            </div>
-            <div className="text-sm text-muted-foreground">Average Score</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-              {filteredResults.filter(r => r.overallScore >= 80).length}
-            </div>
-            <div className="text-sm text-muted-foreground">High Performers</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-              {Math.round(filteredResults.reduce((acc, r) => acc + r.duration, 0) / filteredResults.length || 0)}
-            </div>
-            <div className="text-sm text-muted-foreground">Avg Duration (min)</div>
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* Results Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {filteredResults.map((result) => (
-          <Card key={result.id} className="hover:shadow-lg transition-shadow">
-            <CardHeader className="pb-4">
-              <div className="flex justify-between items-start">
-                <div className="flex items-center gap-3">                  <div className="w-10 h-10 bg-blue-500/10 dark:bg-blue-500/20 rounded-full flex items-center justify-center">
-                    <User className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-lg">{result.candidateName}</h3>
-                    <p className="text-sm text-muted-foreground">{result.candidateEmail}</p>
-                  </div>
-                </div>
-                <Badge variant={getScoreBadgeVariant(result.overallScore)} className="text-lg px-3 py-1">
-                  {result.overallScore}
-                </Badge>
-              </div>
-            </CardHeader>
-            
-            <CardContent className="space-y-4">              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline">{result.position}</Badge>
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Calendar className="h-4 w-4" />
-                  {format(result.interviewDate, 'MMM dd, yyyy')}
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  {result.duration} minutes
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Star className="h-4 w-4" />
-                  {result.status}
-                </div>
-              </div>              {/* Key Metrics */}
-              <div className="grid grid-cols-2 gap-2">
-                {Object.entries(result.metrics).map(([key, value]) => (
-                  <div key={key} className="flex justify-between items-center p-2 bg-muted rounded">
-                    <span className="text-xs font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                    <span className={`text-xs font-bold px-2 py-1 rounded ${getScoreColor(value as number)}`}>
-                      {value as number}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Transcript Preview */}
-              <div className="bg-muted p-3 rounded">
-                <h4 className="text-sm font-medium mb-2">Transcript Preview</h4>
-                <p className="text-xs text-muted-foreground line-clamp-2">
-                  {expandedCards.has(result.id) 
-                    ? result.transcriptPreview 
-                    : `${result.transcriptPreview.substring(0, 100)}...`
-                  }
-                </p>
+          {/* Filters and Search */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span className="flex items-center">
+                  <Filter className="w-5 h-5 mr-2" />
+                  Filters & Search
+                </span>
                 <Button
-                  variant="ghost"
+                  onClick={() => fetchResults()}
+                  disabled={loading}
                   size="sm"
-                  onClick={() => toggleCardExpansion(result.id)}
-                  className="mt-2 p-0 h-auto text-primary hover:text-primary/80"
+                  variant="outline"
                 >
-                  {expandedCards.has(result.id) ? (
-                    <>Show Less <ChevronUp className="h-3 w-3 ml-1" /></>
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
-                    <>Show More <ChevronDown className="h-3 w-3 ml-1" /></>
+                    <RefreshCw className="w-4 h-4 mr-2" />
                   )}
+                  Refresh
                 </Button>
-              </div>              {/* AI Insights Preview */}
-              {expandedCards.has(result.id) && (
-                <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded">
-                  <h4 className="text-sm font-medium mb-2 text-blue-900 dark:text-blue-100">AI Insights</h4>
-                  <ul className="text-xs space-y-1">
-                    {result.aiInsights.map((insight, index) => (
-                      <li key={index} className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
-                        <div className="w-1 h-1 bg-blue-600 dark:bg-blue-400 rounded-full"></div>
-                        {insight}
-                      </li>
-                    ))}
-                  </ul>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search candidates..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
                 </div>
-              )}
+                
+                <Select value={positionFilter} onValueChange={setPositionFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Position" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Positions</SelectItem>
+                    {uniquePositions.map(position => (
+                      <SelectItem key={position} value={position}>{position}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              {/* Actions */}
-              <div className="flex gap-2 pt-2">
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={() => setSelectedResult(result)}>
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Details
-                    </Button>
-                  </DialogTrigger>                  <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                      <DialogTitle>Interview Results - {selectedResult?.candidateName}</DialogTitle>
-                    </DialogHeader>
-                    <ResultsDetailView result={selectedResult} />
-                  </DialogContent>
-                </Dialog>
-                <Button variant="ghost" size="sm" onClick={() => handleExportSingle(result)}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Export
-                </Button>
+                <Select value={scoreFilter} onValueChange={setScoreFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Score Range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Scores</SelectItem>
+                    <SelectItem value="excellent">Excellent (90-100)</SelectItem>
+                    <SelectItem value="good">Good (80-89)</SelectItem>
+                    <SelectItem value="average">Average (70-79)</SelectItem>
+                    <SelectItem value="poor">Poor (&lt;70)</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={dateFilter} onValueChange={setDateFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Date Range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Dates</SelectItem>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="week">This Week</SelectItem>
+                    <SelectItem value="month">This Month</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <div className="flex space-x-2">
+                  <Button
+                    onClick={() => exportToCSV(filteredResults, 'interview-results')}
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                  >
+                    <Download className="w-4 h-4 mr-1" />
+                    CSV
+                  </Button>
+                  <Button
+                    onClick={() => exportToPDF(filteredResults, 'interview-results')}
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                  >
+                    <Download className="w-4 h-4 mr-1" />
+                    PDF
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
-        ))}
-      </div>      {filteredResults.length === 0 && (
-        <Card className="text-center py-12">          <CardContent>
-            <div className="text-muted-foreground">
-              <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <h3 className="text-lg font-medium mb-2">No results found</h3>
-              <p>Try adjusting your filters or search terms</p>
+
+          {/* Results Summary */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-gray-600">
+                {loading ? (
+                  <span className="flex items-center">
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Loading results...
+                  </span>
+                ) : (
+                  `Showing ${filteredResults.length} of ${pagination.total} results`
+                )}
+              </p>
+              
+              {pagination.totalPages > 1 && (
+                <div className="flex items-center space-x-2">
+                  <Button
+                    onClick={() => fetchResults(pagination.page - 1)}
+                    disabled={pagination.page <= 1 || loading}
+                    size="sm"
+                    variant="outline"
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm">
+                    Page {pagination.page} of {pagination.totalPages}
+                  </span>
+                  <Button
+                    onClick={() => fetchResults(pagination.page + 1)}
+                    disabled={pagination.page >= pagination.totalPages || loading}
+                    size="sm"
+                    variant="outline"
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+
+          {/* Results List */}
+          {loading && interviewResults.length === 0 ? (
+            <div className="text-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+              <p>Loading interview results...</p>
+            </div>
+          ) : filteredResults.length === 0 ? (
+            <Card>
+              <CardContent className="text-center py-12">
+                <p className="text-gray-500 mb-4">No interview results found</p>
+                <p className="text-sm text-gray-400">
+                  {interviewResults.length === 0
+                     ? "No interviews have been conducted yet."
+                     : "Try adjusting your search or filter criteria."}
+                </p>
+                {interviewResults.length === 0 && (
+                  <Button className="mt-4" onClick={() => window.location.href = '/interviews'}>
+                    Conduct Interview
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {filteredResults.map((result) => (
+                <Card key={result.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-4">
+                        <div>
+                          <h3 className="text-lg font-semibold">{result.candidateName}</h3>
+                          <p className="text-sm text-gray-600">{result.candidateEmail}</p>
+                        </div>
+                        <Badge variant="outline">{result.position}</Badge>
+                        <Badge variant={getStatusBadgeVariant(result.status)}>
+                          {result.status}
+                        </Badge>
+                      </div>
+                      
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                          <div className={`text-2xl font-bold ${getScoreColor(result.overallScore)}`}>
+                            {result.overallScore}
+                          </div>
+                          <p className="text-xs text-gray-500">Overall Score</p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleCardExpansion(result.id)}
+                        >
+                          {expandedCards.has(result.id) ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div className="flex items-center">
+                        <Calendar className="w-4 h-4 mr-2 text-gray-400" />
+                        <span className="text-sm">{formatDate(result.interviewDate)}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <Clock className="w-4 h-4 mr-2 text-gray-400" />
+                        <span className="text-sm">{result.duration} min</span>
+                      </div>
+                      <div className="flex items-center">
+                        <User className="w-4 h-4 mr-2 text-gray-400" />
+                        <span className="text-sm">{result.interviewerName}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <Star className="w-4 h-4 mr-2 text-gray-400" />
+                        <span className="text-sm">{result.templateTitle}</span>
+                      </div>
+                    </div>
+
+                    {/* Metrics Bar */}
+                    <div className="grid grid-cols-4 gap-2 mb-4">
+                      <div className="text-center">
+                        <div className={`text-lg font-semibold ${getScoreColor(result.metrics.technical)}`}>
+                          {result.metrics.technical}
+                        </div>
+                        <p className="text-xs text-gray-500">Technical</p>
+                      </div>
+                      <div className="text-center">
+                        <div className={`text-lg font-semibold ${getScoreColor(result.metrics.communication)}`}>
+                          {result.metrics.communication}
+                        </div>
+                        <p className="text-xs text-gray-500">Communication</p>
+                      </div>
+                      <div className="text-center">
+                        <div className={`text-lg font-semibold ${getScoreColor(result.metrics.problemSolving)}`}>
+                          {result.metrics.problemSolving}
+                        </div>
+                        <p className="text-xs text-gray-500">Problem Solving</p>
+                      </div>
+                      <div className="text-center">
+                        <div className={`text-lg font-semibold ${getScoreColor(result.metrics.culturalFit)}`}>
+                          {result.metrics.culturalFit}
+                        </div>
+                        <p className="text-xs text-gray-500">Cultural Fit</p>
+                      </div>
+                    </div>
+
+                    {/* AI Insights Preview */}
+                    {result.aiInsights && result.aiInsights.length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-sm font-medium mb-2">Key Insights:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {result.aiInsights.slice(0, 3).map((insight: string, index: number) => (
+                            <Badge key={index} variant="secondary" className="text-xs">
+                              {insight.length > 50 ? insight.substring(0, 50) + '...' : insight}
+                            </Badge>
+                          ))}
+                          {result.aiInsights.length > 3 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{result.aiInsights.length - 3} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Expanded Details */}
+                    {expandedCards.has(result.id) && (
+                      <div className="border-t pt-4 mt-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <h4 className="font-medium mb-2">Strengths</h4>
+                            <ul className="text-sm text-gray-600 space-y-1">
+                              {result.strengths && result.strengths.map((strength: string, index: number) => (
+                                <li key={index}>• {strength}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div>
+                            <h4 className="font-medium mb-2">Areas for Improvement</h4>
+                            <ul className="text-sm text-gray-600 space-y-1">
+                              {result.areasForImprovement && result.areasForImprovement.map((area: string, index: number) => (
+                                <li key={index}>• {area}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                        
+                        {result.transcriptPreview && (
+                          <div className="mt-4">
+                            <h4 className="font-medium mb-2">Transcript Preview</h4>
+                            <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
+                              {result.transcriptPreview}
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-center mt-4">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="outline" size="sm" onClick={() => setSelectedResult(result)}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                View Full Details
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                              <DialogHeader>
+                                <DialogTitle>Interview Results - {result.candidateName}</DialogTitle>
+                              </DialogHeader>
+                              {selectedResult && <ResultsDetailView result={selectedResult} />}
+                            </DialogContent>
+                          </Dialog>
+                          
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => window.open(`/results/individual?session=${result.id}`, '_blank')}
+                          >
+                            Open Full Results
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </DashboardLayout>
     </DashboardRoute>

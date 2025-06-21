@@ -171,11 +171,12 @@ export default function ConductInterviewPage() {
               )}
             </div>
 
-            {/* Interview Component */}
-            <div className="lg:col-span-2">
+            {/* Interview Component */}            <div className="lg:col-span-2">
               <InterviewComponent
                 templateId={session.templateId}
                 assistantId={process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID}
+                candidateName={session.candidateName}
+                position={session.position}
                 onInterviewStart={handleInterviewStart}
                 onInterviewEnd={handleInterviewEnd}
                 onError={handleInterviewError}

@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import { createHmac } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { getSessionByCallId } from '@/lib/interview-session'
+import { getSessionDefaults } from '@/lib/session-defaults'
 
 // Types for Vapi webhook events
 interface VapiWebhookEvent {
@@ -75,24 +76,51 @@ const handleCallStarted = async (event: VapiWebhookEvent) => {
       })
       console.log('Updated existing session for call:', event.call.id)
     } else {
-      // Create a new session for orphaned calls
-      // This handles cases where Vapi starts a call without pre-existing session
-      console.log('Creating new session for orphaned call:', event.call.id)
-      
-      await prisma.interviewSession.create({
-        data: {
-          candidate_name: 'Unknown Candidate',
-          candidate_email: 'unknown@example.com',
-          position: 'Unknown Position',
-          template_id: 'default', // You might want to create a default template
-          interviewer_id: 'system', // You might want to create a system user
-          vapi_call_id: event.call.id,
-          vapi_assistant_id: event.call.assistantId,
-          status: 'in_progress',
-          started_at: new Date(event.call?.startedAt || event.timestamp),
-          real_time_messages: []
-        }
+      // Try to find a session that was created without a call ID and update it
+      // Look for recent sessions without call IDs
+      const recentSession = await prisma.interviewSession.findFirst({
+        where: {
+          AND: [
+            { vapi_call_id: { in: ['', null] } },
+            { created_at: { gte: new Date(Date.now() - 10 * 60 * 1000) } }, // Within last 10 minutes
+            { status: 'scheduled' }
+          ]
+        },
+        orderBy: { created_at: 'desc' }
       })
+
+      if (recentSession) {
+        // Update this session with the call ID
+        await prisma.interviewSession.update({
+          where: { id: recentSession.id },
+          data: {
+            vapi_call_id: event.call.id,
+            vapi_assistant_id: event.call?.assistantId,
+            status: 'in_progress',
+            started_at: new Date(event.call?.startedAt || event.timestamp),
+          }
+        })
+        console.log('Updated recent session with call ID:', event.call.id, 'Session:', recentSession.id)      } else {
+        // Create a new session for orphaned calls
+        console.log('Creating new session for orphaned call:', event.call.id)
+        
+        const defaults = await getSessionDefaults()
+        
+        await prisma.interviewSession.create({
+          data: {
+            candidate_name: 'Unknown Candidate',
+            candidate_email: 'unknown@example.com',
+            position: 'Unknown Position',
+            template_id: defaults.templateId,
+            interviewer_id: defaults.interviewerId,
+            vapi_call_id: event.call.id,
+            vapi_assistant_id: event.call.assistantId || '',
+            status: 'in_progress',
+            started_at: new Date(event.call?.startedAt || event.timestamp),
+            real_time_messages: []
+          }
+        })
+      }
     }
   } catch (error) {
     console.error('Error handling call start:', error)

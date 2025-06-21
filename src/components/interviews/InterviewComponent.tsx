@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useVapi } from '@/hooks/useVapi';
+import { useTemplates } from '@/hooks/useTemplates';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -52,15 +53,74 @@ export const InterviewComponent: React.FC<InterviewComponentProps> = ({
     setVolume 
   } = useVapi();
 
+  const { getTemplate } = useTemplates();
   const [lastDuration, setLastDuration] = useState<number>(0);
-
+  const [templateData, setTemplateData] = useState<any>(null);
+  const [loadingTemplate, setLoadingTemplate] = useState(false);
+  const [extractedQuestions, setExtractedQuestions] = useState<string[]>([]);
   // Format duration as MM:SS
   const formatDuration = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
-  // Handle call state changes
+
+  // Fetch template data when templateId changes
+  useEffect(() => {
+    const fetchTemplateData = async () => {
+      if (!templateId) {
+        setTemplateData(null);
+        setExtractedQuestions([]);
+        return;
+      }
+
+      setLoadingTemplate(true);
+      try {
+        const template = await getTemplate(templateId);
+        if (template) {
+          setTemplateData(template);
+          
+          // Extract questions from template
+          let questions: string[] = [];
+            // Check for rawQuestions first (new format)
+          if (template.rawQuestions && Array.isArray(template.rawQuestions)) {
+            questions = template.rawQuestions.map((q: any) => {
+              if (typeof q === 'string') return q;
+              if (q.title) return q.title; // Primary field for question text
+              if (q.question) return q.question;
+              if (q.text) return q.text;
+              return JSON.stringify(q); // fallback
+            });
+          }
+          // Fallback to questions field (legacy format)
+          else if (template.questions) {
+            if (Array.isArray(template.questions)) {
+              questions = template.questions.map((q: any) => {
+                if (typeof q === 'string') return q;
+                if (q.title) return q.title; // Primary field for question text
+                if (q.question) return q.question;
+                if (q.text) return q.text;
+                return JSON.stringify(q); // fallback
+              });
+            }
+          }
+          
+          setExtractedQuestions(questions);
+          console.log('Extracted questions from template:', questions);
+        } else {
+          console.error('Template not found:', templateId);
+          onError?.(`Template ${templateId} not found`);
+        }
+      } catch (error) {
+        console.error('Error fetching template:', error);
+        onError?.(`Failed to load template: ${error}`);
+      } finally {
+        setLoadingTemplate(false);
+      }
+    };
+
+    fetchTemplateData();
+  }, [templateId, getTemplate, onError]);  // Handle call state changes
   useEffect(() => {
     switch (callState.status) {
       case 'connected':
@@ -78,12 +138,16 @@ export const InterviewComponent: React.FC<InterviewComponentProps> = ({
         }
         break;
     }
-  }, [callState.status, callState.duration, callState.error]); // Remove callback functions from dependencies
+  }, [callState.status, callState.duration, callState.error, onInterviewStart, onInterviewEnd, onError]);
+
   const handleStartInterview = async () => {
     try {
+      // Determine which questions to use (template questions take priority)
+      const questionsToUse = templateQuestions || extractedQuestions;
+      
       // Use enhanced analysis if candidate name and position are provided
       if (useEnhancedAnalysis && candidateName && position) {
-        await startInterviewCall(candidateName, position, templateQuestions);
+        await startInterviewCall(candidateName, position, questionsToUse);
       } else {
         await startCall(assistantId);
       }

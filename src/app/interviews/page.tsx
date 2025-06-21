@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -48,10 +48,15 @@ import {   Plus,
   Download,
   Trash2,
   RefreshCw,
-  Eye
+  Eye,
+  FileText,
+  Loader2,
+  Share,
+  Copy
 } from "lucide-react"
 import { DashboardLayout } from "@/components/Layout"
 import { DashboardRoute } from "@/components/auth/ProtectedRoute"
+import { useTemplates } from "@/hooks/useTemplates"
 
 // Mock data
 const interviews = [
@@ -170,6 +175,360 @@ const formatDateTime = (dateString: string) => {
   }
 }
 
+// Template Selection Dialog Component
+const TemplateSelectionDialog = ({ isOpen, onClose, onSelectTemplate, onGenerateLink }: {
+  isOpen: boolean
+  onClose: () => void
+  onSelectTemplate: (templateId: string | null) => void
+  onGenerateLink: (templateId: string) => void
+}) => {
+  const { templates, loading, error } = useTemplates()
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedCategory, setSelectedCategory] = useState("All Categories")
+
+  // Filter templates
+  const filteredTemplates = templates.filter(template => {
+    const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         template.description.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = selectedCategory === "All Categories" || template.category === selectedCategory
+    return matchesSearch && matchesCategory
+  })
+
+  // Get unique categories
+  const categories = ["All Categories", ...Array.from(new Set(templates.map(t => t.category)))]
+
+  const handleStartInterview = (templateId: string | null) => {
+    onSelectTemplate(templateId)
+    onClose()
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
+        <DialogHeader>
+          <DialogTitle>Select Interview Template</DialogTitle>
+          <DialogDescription>
+            Choose a template for your live interview or start a general interview
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4">
+          {/* General Interview Option */}
+          <Card className="border-2 border-primary/20 hover:border-primary/40 transition-colors cursor-pointer"
+                onClick={() => handleStartInterview(null)}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <Play className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">General Interview</h3>
+                  <p className="text-sm text-muted-foreground">Start an open-ended interview without a specific template</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Search and Filter */}
+          <div className="flex gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <Input
+                placeholder="Search templates..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map(category => (
+                  <SelectItem key={category} value={category}>{category}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Templates List */}
+          <div className="max-h-96 overflow-y-auto space-y-3">
+            {loading && (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin" />
+                <span className="ml-2">Loading templates...</span>
+              </div>
+            )}
+
+            {error && (
+              <div className="text-center py-8 text-red-600">
+                <p>Error loading templates: {error}</p>
+              </div>
+            )}
+
+            {!loading && !error && filteredTemplates.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                <FileText className="w-8 h-8 mx-auto mb-2" />
+                <p>No templates found</p>
+              </div>
+            )}            {filteredTemplates.map((template) => (
+              <Card key={template.id} 
+                    className="hover:shadow-md transition-shadow border">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="font-semibold">{template.name}</h3>
+                        <Badge variant="secondary">{template.category}</Badge>
+                        <Badge variant="outline">{template.difficulty}</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">{template.description}</p>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span>{template.questions} questions</span>
+                        <span>{template.duration} min</span>
+                        <span>Used {template.usageCount} times</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2">                      <Button 
+                        variant="default" 
+                        size="sm"
+                        onClick={() => onSelectTemplate(template.id)}
+                      >
+                        <Play className="w-4 h-4 mr-1" />
+                        Start Now
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => onGenerateLink(template.id)}
+                      >
+                        <Share className="w-4 h-4 mr-1" />
+                        Generate Link
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Link Generation Dialog Component
+const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
+  isOpen: boolean
+  onClose: () => void
+  templateId: string | null
+}) => {
+  const { getTemplate } = useTemplates()
+  const [templateData, setTemplateData] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [position, setPosition] = useState("")
+  const [duration, setDuration] = useState("")
+  const [description, setDescription] = useState("")
+  const [generatedLink, setGeneratedLink] = useState("")
+  const [isGenerating, setIsGenerating] = useState(false)
+
+  // Fetch template data when templateId changes
+  useEffect(() => {
+    const fetchTemplate = async () => {
+      if (!templateId) return
+      
+      setLoading(true)
+      try {
+        const template = await getTemplate(templateId)
+        if (template) {
+          setTemplateData(template)
+          setDuration(template.duration?.toString() || '30')
+        }
+      } catch (error) {
+        console.error('Error fetching template:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchTemplate()
+  }, [templateId, getTemplate])
+
+  const handleGenerateLink = async () => {
+    if (!templateId || !position.trim()) return
+
+    setIsGenerating(true)
+    try {
+      const response = await fetch('/api/interviews/links', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          templateId,
+          position: position.trim(),
+          duration: parseInt(duration) || 30,
+          description: description.trim() || `Interview for ${position} position`
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setGeneratedLink(data.session.link)
+      } else {
+        const error = await response.json()
+        console.error('Failed to generate link:', error)
+        // TODO: Show error toast
+      }
+    } catch (error) {
+      console.error('Error generating link:', error)
+      // TODO: Show error toast
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleCopyLink = () => {
+    if (generatedLink) {
+      navigator.clipboard.writeText(generatedLink)
+      // TODO: Show success toast
+    }
+  }
+
+  const handleClose = () => {
+    setPosition("")
+    setDuration("")
+    setDescription("")
+    setGeneratedLink("")
+    onClose()
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Generate Interview Link</DialogTitle>
+          <DialogDescription>
+            Create a shareable link for candidates to join the interview
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4">
+          {loading && (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-6 h-6 animate-spin mr-2" />
+              <span>Loading template...</span>
+            </div>
+          )}
+
+          {templateData && !loading && (
+            <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+              <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">
+                Template: {templateData.name}
+              </h4>
+              <p className="text-sm text-blue-700 dark:text-blue-300 mb-2">
+                {templateData.description}
+              </p>
+              <div className="flex gap-2 text-xs">
+                <Badge variant="secondary">{templateData.category}</Badge>
+                <Badge variant="outline">{templateData.difficulty}</Badge>
+                <Badge variant="outline">{templateData.questions} questions</Badge>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Position Title</label>
+              <Input
+                placeholder="e.g., Frontend Developer, Product Manager"
+                value={position}
+                onChange={(e) => setPosition(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Estimated Duration (minutes)</label>
+              <Input
+                type="number"
+                placeholder="30"
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Description (Optional)</label>
+              <Input
+                placeholder="Additional information for the candidate"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+          </div>
+
+          {!generatedLink ? (
+            <Button
+              onClick={handleGenerateLink}
+              disabled={!position.trim() || isGenerating}
+              className="w-full"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Generating Link...
+                </>
+              ) : (
+                <>
+                  <Share className="w-4 h-4 mr-2" />
+                  Generate Interview Link
+                </>
+              )}
+            </Button>
+          ) : (
+            <div className="space-y-3">
+              <div className="bg-green-50 dark:bg-green-950 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                <h4 className="font-medium text-green-800 dark:text-green-200 mb-2">
+                  Interview Link Generated!
+                </h4>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={generatedLink}
+                    readOnly
+                    className="flex-1 font-mono text-sm"
+                  />
+                  <Button
+                    onClick={handleCopyLink}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+                <p className="text-sm text-green-700 dark:text-green-300 mt-2">
+                  Send this link to the candidate. They'll fill out their information before starting the interview.
+                </p>
+              </div>
+              
+              <Button
+                onClick={handleClose}
+                variant="outline"
+                className="w-full"
+              >
+                Close
+              </Button>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function InterviewsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("All Status")
@@ -177,7 +536,28 @@ export default function InterviewsPage() {
   const [interviewerFilter, setInterviewerFilter] = useState("All Interviewers")
   const [selectedInterviews, setSelectedInterviews] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
+  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false)
+  const [isLinkGenerationDialogOpen, setIsLinkGenerationDialogOpen] = useState(false)
+  const [selectedTemplateForLink, setSelectedTemplateForLink] = useState<string | null>(null)
   const itemsPerPage = 6
+
+  // Handler functions
+  const handleTemplateSelection = (templateId: string | null) => {
+    if (templateId) {
+      // Navigate to conduct page with template ID
+      window.location.href = `/interviews/conduct?template=${templateId}`
+    } else {
+      // Navigate to conduct page for general interview
+      window.location.href = '/interviews/conduct'
+    }
+  }
+
+  const handleGenerateLink = (templateId: string) => {
+    // Open link generation dialog
+    setSelectedTemplateForLink(templateId)
+    setIsLinkGenerationDialogOpen(true)
+    setIsTemplateDialogOpen(false)
+  }
 
   // Filter interviews
   const filteredInterviews = interviews.filter(interview => {
@@ -195,7 +575,6 @@ export default function InterviewsPage() {
   const totalPages = Math.ceil(filteredInterviews.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedInterviews = filteredInterviews.slice(startIndex, startIndex + itemsPerPage)
-
   const handleSelectInterview = (interviewId: string) => {
     setSelectedInterviews(prev =>      prev.includes(interviewId) 
         ? prev.filter(id => id !== interviewId)
@@ -208,6 +587,7 @@ export default function InterviewsPage() {
     // Here you would implement the actual bulk actions
     setSelectedInterviews([])
   }
+
   return (
     <DashboardRoute>
       <DashboardLayout>
@@ -224,7 +604,7 @@ export default function InterviewsPage() {
                 <Play className="w-4 h-4 mr-2" />
                 Demo Interview
               </Button>
-              <Button onClick={() => window.location.href = '/interviews/conduct'}>
+              <Button onClick={() => setIsTemplateDialogOpen(true)}>
                 <Plus className="w-4 h-4 mr-2" />
                 Start Live Interview
               </Button>
@@ -516,11 +896,23 @@ export default function InterviewsPage() {
               setInterviewerFilter("All Interviewers")
             }}>
               Clear Filters
-            </Button>
-          </CardContent>
+            </Button>          </CardContent>
         </Card>
       )}
-        </div>
+        </div>        {/* Template Selection Dialog */}
+        <TemplateSelectionDialog 
+          isOpen={isTemplateDialogOpen}
+          onClose={() => setIsTemplateDialogOpen(false)}
+          onSelectTemplate={handleTemplateSelection}
+          onGenerateLink={handleGenerateLink}
+        />
+
+        {/* Link Generation Dialog */}
+        <LinkGenerationDialog
+          isOpen={isLinkGenerationDialogOpen}
+          onClose={() => setIsLinkGenerationDialogOpen(false)}
+          templateId={selectedTemplateForLink}
+        />
       </DashboardLayout>
     </DashboardRoute>
   )

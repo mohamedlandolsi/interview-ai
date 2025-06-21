@@ -3,8 +3,6 @@
  * Handles creation and management of Vapi assistants with enhanced analysis capabilities
  */
 
-import { createInterviewAssistantConfig } from './vapi-assistant-config';
-
 interface CreateAssistantParams {
   candidateName: string;
   position: string;
@@ -24,35 +22,107 @@ interface VapiAssistantResponse {
 export class VapiAssistantService {
   private static readonly VAPI_API_BASE = 'https://api.vapi.ai';
   private static readonly VAPI_API_KEY = process.env.VAPI_PRIVATE_KEY;
-
   /**
    * Create a new Vapi assistant with enhanced analysis configuration
    */
   static async createInterviewAssistant(params: CreateAssistantParams): Promise<VapiAssistantResponse> {
-    const config = createInterviewAssistantConfig(
-      params.candidateName,
-      params.position,
-      params.templateQuestions || []
-    );
+    console.log('🔧 VapiAssistantService.createInterviewAssistant called with:', JSON.stringify(params, null, 2))
+    console.log('🔑 VAPI_API_KEY exists:', !!this.VAPI_API_KEY)
+    console.log('🔑 VAPI_API_KEY length:', this.VAPI_API_KEY?.length || 0)
+    
+    if (!this.VAPI_API_KEY) {
+      throw new Error('VAPI_PRIVATE_KEY environment variable is not set')
+    }      // Create a clean, valid Vapi assistant configuration
+    const questionsList = (params.templateQuestions && params.templateQuestions.length > 0) 
+      ? params.templateQuestions.join('\n- ') 
+      : 'Ask relevant questions for the position';
+
+    console.log('🎯 Template questions received in service:', params.templateQuestions);
+    console.log('🎯 Formatted questions list:', questionsList);
+
+    // Create a shorter name that fits Vapi's 40 character limit
+    let assistantName = `Interview - ${params.candidateName}`;
+    if (assistantName.length > 40) {
+      assistantName = `Interview - ${params.candidateName.split(' ')[0]}`;
+    }
+    if (assistantName.length > 40) {
+      assistantName = 'Interview Assistant';
+    }    const config = {
+      name: assistantName,
+      transcriber: {
+        provider: "deepgram" as const,
+        model: "nova-2" as const,
+        language: "en-US" as const
+      },      voice: {
+        provider: "11labs" as const,
+        voiceId: "pNInz6obpgDQGcFmaJgB",
+        stability: 0.6,
+        similarityBoost: 0.9,
+        style: 0.2,
+        useSpeakerBoost: true
+      },
+      model: {
+        provider: "openai" as const,
+        model: "gpt-4" as const,
+        temperature: 0.1,
+        messages: [{
+          role: "system" as const,          content: `You are an expert AI interviewer conducting a professional job interview for the position: ${params.position}.
+
+**Your Role:**
+- Conduct a structured yet conversational interview
+- Ask insightful follow-up questions
+- Maintain a professional but friendly tone
+- Keep the candidate engaged and comfortable
+- Gather comprehensive information about their qualifications
+- ALWAYS start speaking immediately when the call begins
+
+**Interview Structure:**
+1. Start with a warm welcome and brief position overview
+2. Ask about their background and experience
+3. Cover key competency areas for the role
+4. Include behavioral and situational questions
+5. Allow time for candidate questions
+6. Close professionally with next steps
+
+**SPECIFIC QUESTIONS TO ASK (Ask these questions in order):**
+- ${questionsList}
+
+**Additional Guidelines:**
+- Listen actively and ask relevant follow-ups
+- Keep responses concise but thorough
+- Maintain professional interview pace
+- Be encouraging and supportive
+- Take detailed notes mentally for analysis
+- Adapt questions based on candidate responses
+- Speak clearly and at a measured pace
+
+**Important:** This interview will be analyzed for:
+- Communication effectiveness
+- Technical competency
+- Cultural fit
+- Professional experience
+- Overall candidate suitability
+
+Begin immediately with: "Hello! I'm your AI interviewer today. I'm excited to learn more about your background and experience for the ${params.position} position. Let's begin - could you please introduce yourself and tell me what interests you most about this role?"`
+        }]      },
+      recordingEnabled: true,
+      endCallMessage: "Thank you for your time today. We'll be in touch with next steps soon. Have a great day!",
+      maxDurationSeconds: 3600,
+      backgroundDenoisingEnabled: true,      responseDelaySeconds: 0.4,
+      firstMessage: "Hello! I'm your AI interviewer today. I'm excited to learn more about your background and experience for this position. Let's begin - could you please introduce yourself and tell me what interests you most about this role?"
+    };
+
+    console.log('🎯 Generated assistant config:', JSON.stringify(config, null, 2))
 
     // Add company-specific customizations
     if (params.companyName) {
-      config.name = `${params.companyName} - Interview Assistant for ${params.candidateName}`;
-      
-      // Update system message to include company context
-      if (config.model && 'messages' in config.model && config.model.messages) {
-        const systemMessage = config.model.messages[0];
-        if (systemMessage && systemMessage.role === 'system') {
-          systemMessage.content = `${systemMessage.content}\n\n**Company Context:**\nYou are interviewing for ${params.companyName}. Tailor your questions and evaluation to assess fit with our company culture and values.`;
-        }
-      }
+      const systemMessage = config.model.messages[0];
+      systemMessage.content = `${systemMessage.content}\n\n**Company Context:**\nYou are interviewing for ${params.companyName}. Tailor your questions and evaluation to assess fit with our company culture and values.`;
     }
 
-    // Customize based on interview type
-    if (params.interviewType) {
-      config.name += ` (${params.interviewType.charAt(0).toUpperCase() + params.interviewType.slice(1)})`;
-    }
-
+    console.log('🚀 Sending request to Vapi API...')
+    console.log('🔗 URL:', `${this.VAPI_API_BASE}/assistant`)
+    
     try {
       const response = await fetch(`${this.VAPI_API_BASE}/assistant`, {
         method: 'POST',
@@ -63,15 +133,27 @@ export class VapiAssistantService {
         body: JSON.stringify(config)
       });
 
+      console.log('📡 Vapi API response status:', response.status, response.statusText)
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorText = await response.text()
+        console.error('❌ Vapi API error response:', errorText)
+        
+        let errorData = {}
+        try {
+          errorData = JSON.parse(errorText)
+        } catch (e) {
+          errorData = { message: errorText }
+        }
+        
         throw new Error(`Failed to create assistant: ${response.status} ${response.statusText}. ${JSON.stringify(errorData)}`);
       }
 
       const assistant = await response.json();
+      console.log('✅ Assistant created successfully:', JSON.stringify(assistant, null, 2))
       return assistant;
     } catch (error) {
-      console.error('Error creating Vapi assistant:', error);
+      console.error('❌ Error in Vapi API call:', error);
       throw error;
     }
   }

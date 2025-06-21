@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createInterviewSession, updateSessionWithCallId } from '@/lib/interview-session'
+import { getSessionDefaults } from '@/lib/session-defaults'
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,10 +16,13 @@ export async function POST(request: NextRequest) {
       sessionId // If updating existing session
     } = body
 
-    // Validate required fields
-    if (!candidateName || !candidateEmail || !position || !interviewerId) {
+    // Get defaults for missing values
+    const defaults = await getSessionDefaults()
+    const finalTemplateId = templateId || defaults.templateId
+    const finalInterviewerId = interviewerId || defaults.interviewerId    // Validate required fields
+    if (!candidateName || !position) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required fields: candidateName, position' },
         { status: 400 }
       )
     }
@@ -32,25 +36,23 @@ export async function POST(request: NextRequest) {
         vapiCallId,
         vapiAssistantId
       })
-    } else if (vapiCallId) {
-      // Create new session with call ID
+    } else if (vapiCallId) {      // Create new session with call ID
       session = await createInterviewSession({
         candidateName,
-        candidateEmail,
+        candidateEmail: candidateEmail || `${candidateName.replace(/\s+/g, '').toLowerCase()}@interview.temp`,
         position,
-        templateId: templateId || 'default',
-        interviewerId,
+        templateId: finalTemplateId,
+        interviewerId: finalInterviewerId,
         vapiCallId,
-        vapiAssistantId
+        vapiAssistantId: vapiAssistantId || ''
       })
-    } else {
-      // Create session without call ID (to be updated later)
+    } else {      // Create session without call ID (to be updated later)
       session = await createInterviewSession({
         candidateName,
-        candidateEmail,
+        candidateEmail: candidateEmail || `${candidateName.replace(/\s+/g, '').toLowerCase()}@interview.temp`,
         position,
-        templateId: templateId || 'default',
-        interviewerId,
+        templateId: finalTemplateId,
+        interviewerId: finalInterviewerId,
         vapiCallId: '', // Will be updated when call starts
         vapiAssistantId: vapiAssistantId || ''
       })
