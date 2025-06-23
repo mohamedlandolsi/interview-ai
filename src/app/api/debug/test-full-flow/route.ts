@@ -5,9 +5,12 @@ export async function POST(request: NextRequest) {
   try {
     console.log('=== TESTING FULL INTERVIEW FLOW ===')
     
+    // Get base URL from request
+    const baseUrl = new URL(request.url).origin
+    
     // Step 1: Simulate creating a session (like useVapi does)
     console.log('Step 1: Creating interview session...')
-    const sessionResponse = await fetch('http://localhost:3000/api/interviews/sessions', {
+    const sessionResponse = await fetch(`${baseUrl}/api/interviews/sessions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -96,11 +99,9 @@ export async function POST(request: NextRequest) {
         recording_url: 'https://example.com/recording.mp3'
       }
     })
-    console.log('Call ended and session completed')
-
-    // Step 5: Test results retrieval
+    console.log('Call ended and session completed')    // Step 5: Test results retrieval
     console.log('Step 5: Testing results retrieval...')
-    const resultsResponse = await fetch(`http://localhost:3000/api/interviews/results?sessionId=${sessionId}`, {
+    const resultsResponse = await fetch(`${baseUrl}/api/interviews/results?sessionId=${sessionId}`, {
       method: 'GET',
     });
 

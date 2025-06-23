@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
+import { getInterviewLink } from '@/lib/url-utils'
 
 export async function POST(request: NextRequest) {
   try {
@@ -73,11 +74,8 @@ export async function POST(request: NextRequest) {
           }
         } : false
       }
-    })
-
-    // Generate shareable link
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    const interviewLink = `${baseUrl}/interview/${session.id}`
+    })    // Generate shareable link
+    const interviewLink = getInterviewLink(session.id)
 
     return NextResponse.json({
       success: true,
@@ -131,15 +129,12 @@ export async function GET(request: NextRequest) {
             category: true,
             difficulty: true
           }
-        }
-      },
+        }      },
       orderBy: {
         created_at: 'desc'
       },
       take: 50
     })
-
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
     const sessionsWithLinks = sessions.map(session => ({
       id: session.id,
@@ -149,7 +144,7 @@ export async function GET(request: NextRequest) {
       position: session.position,
       status: session.status,
       duration: session.duration,
-      link: `${baseUrl}/interview/${session.id}`,
+      link: getInterviewLink(session.id),
       template: session.template,
       createdAt: session.created_at,
       updatedAt: session.updated_at

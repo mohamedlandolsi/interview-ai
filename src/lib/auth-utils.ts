@@ -1,4 +1,5 @@
 import { AuthError } from '@supabase/supabase-js'
+import { getBaseUrl } from '@/lib/url-utils'
 
 /**
  * Utility functions for authentication error handling and user feedback
@@ -152,7 +153,7 @@ export function validateEmail(email: string): boolean {
  * Generates redirect URLs for auth flows
  */
 export function getAuthRedirectURL(type: 'reset-password' | 'verify-email' | 'signup'): string {
-  const baseURL = typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  const baseURL = getBaseUrl()
   
   switch (type) {
     case 'reset-password':
