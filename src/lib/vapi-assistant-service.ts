@@ -23,6 +23,8 @@ interface VapiAssistantResponse {
 export class VapiAssistantService {
   private static readonly VAPI_API_BASE = 'https://api.vapi.ai';
   private static readonly VAPI_API_KEY = process.env.VAPI_PRIVATE_KEY;
+  private static readonly REUSABLE_ASSISTANT_NAME = 'InterQ - Interview Assistant';
+
   /**
    * Create a new Vapi assistant with enhanced analysis configuration
    */
@@ -343,6 +345,50 @@ Begin with a professional greeting and position introduction.`;
     }
 
     return this.createInterviewAssistant(specializedConfig);
+  }
+
+  /**
+   * Find or create a single reusable assistant for all interviews
+   */
+  static async findOrCreateReusableAssistant(): Promise<VapiAssistantResponse> {
+    console.log('🔍 Looking for existing reusable assistant...');
+    
+    try {
+      // First, try to find an existing reusable assistant
+      const assistants = await this.listAssistants();
+      const existingAssistant = assistants.find(
+        assistant => assistant.name === this.REUSABLE_ASSISTANT_NAME
+      );
+
+      if (existingAssistant) {
+        console.log('✅ Found existing reusable assistant:', existingAssistant.id);
+        return existingAssistant;
+      }
+
+      // If no reusable assistant exists, create one
+      console.log('🆕 Creating new reusable assistant...');
+      return await this.createReusableAssistant();
+      
+    } catch (error) {
+      console.error('❌ Error finding/creating reusable assistant:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a single reusable assistant with generic configuration
+   */
+  private static async createReusableAssistant(): Promise<VapiAssistantResponse> {
+    const defaultParams: CreateAssistantParams = {
+      candidateName: 'Default',
+      position: 'Generic Position',
+      templateQuestions: [],
+      templateInstruction: '',
+      companyName: '',
+      interviewType: 'general'
+    };
+
+    return this.createInterviewAssistant(defaultParams);
   }
 }
 

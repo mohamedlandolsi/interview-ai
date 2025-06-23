@@ -307,45 +307,129 @@ export const useVapi = (): UseVapiReturn => {
       } catch (sessionError) {
         console.warn('Failed to create session:', sessionError);
         // Continue with call even if session creation fails
-      }      // Option 1: Create assistant dynamically via API
-      try {
-        console.log('🚀 Attempting to create dynamic assistant via API...')
-        const response = await fetch('/api/vapi/assistants', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },          body: JSON.stringify({
-            candidateName,
-            position,
-            templateQuestions,
-            templateInstruction,
-            interviewType: 'general',
-            sessionId // Pass session ID to assistant
-          })
-        });
+      }      // Determine whether to use dynamic configuration or static assistant
+      const hasTemplateData = (templateQuestions && templateQuestions.length > 0) || templateInstruction;
+      const configuredAssistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID;
+      
+      if (hasTemplateData) {
+        // Use dynamic configuration when template data is available to ensure 
+        // instructions and questions are properly incorporated
+        console.log('🎯 Template data detected - using dynamic assistant configuration');
+        console.log('📋 Template questions:', templateQuestions?.length || 0);
+        console.log('📝 Template instructions:', !!templateInstruction);
+        
+        const questions = templateQuestions && templateQuestions.length > 0 
+          ? templateQuestions 
+          : generateQuestionsForRole(position);
 
-        console.log('📡 Assistant API response status:', response.status)
-
-        if (response.ok) {
-          const { assistant } = await response.json();
-          console.log('✅ Created dynamic assistant:', assistant.id);
-          console.log('🎙️ Starting Vapi call with assistant...')
-          await vapiRef.current.start(assistant.id);
-          return;
-        } else {
-          const errorText = await response.text()
-          console.warn('⚠️ Failed to create dynamic assistant:', response.status, errorText);
-          console.warn('🔄 Falling back to local config...');
+        // Build system prompt with template instructions and questions
+        let systemPrompt = `You are a professional AI interviewer for the position: ${position}.`;
+        
+        if (templateInstruction) {
+          systemPrompt += `\n\n**INTERVIEW INSTRUCTIONS:**\n${templateInstruction}`;
         }
-      } catch (apiError) {
-        console.warn('❌ API assistant creation failed:', apiError);
-        console.warn('🔄 Using local config fallback...');      }      // Option 2: Fallback to basic assistant configuration
+        
+        systemPrompt += `\n\n**IMPORTANT: Ask these specific questions during the interview:**
+${questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
+
+**Guidelines:**
+- Start with a warm greeting and introduction
+- Follow the instructions provided above
+- Ask the questions listed above in order, but keep the conversation natural
+- Ask relevant follow-up questions based on responses
+- Be professional, engaging, and encouraging
+- Allow the candidate to ask questions at the end
+- Conclude professionally
+
+Begin the interview now with a greeting.`;
+
+        // Create dynamic assistant config with template data
+        const assistantConfig = {
+          name: candidateName.length > 30 ? "Interview Assistant" : `Interview - ${candidateName.split(' ')[0]}`,
+          transcriber: {
+            provider: "deepgram" as const,
+            model: "nova-2" as const,
+            language: "en-US" as const
+          },
+          voice: {
+            provider: "11labs" as const,
+            voiceId: "pNInz6obpgDQGcFmaJgB",
+            stability: 0.6,
+            similarityBoost: 0.9,
+            style: 0.2,
+            useSpeakerBoost: true
+          },
+          model: {
+            provider: "openai" as const,
+            model: "gpt-4" as const,
+            temperature: 0.1,
+            messages: [{
+              role: "system" as const,
+              content: systemPrompt
+            }]
+          },
+          firstMessage: `Hello! I'm your AI interviewer today. I'm excited to learn more about your background and experience for the ${position} position. Let's begin - could you please introduce yourself and tell me what interests you most about this role?`,
+          responseDelaySeconds: 0.4,
+          backgroundDenoisingEnabled: true
+        };
+
+        console.log('🔧 Using dynamic assistant config with template data');
+        console.log('📋 System prompt preview:', systemPrompt.substring(0, 200) + '...');
+        
+        // Validate configuration before sending to Vapi
+        const validation = validateAssistantConfig(assistantConfig);
+        if (!validation.isValid) {
+          console.error('❌ Invalid assistant configuration:', validation.errors);
+          throw new Error(`Configuration validation failed: ${validation.errors.join(', ')}`);
+        }
+        
+        console.log('✅ Dynamic configuration validation passed');
+        await vapiRef.current.start(assistantConfig);
+        return;
+        
+      } else if (configuredAssistantId) {
+        // Use static assistant when no template data is available
+        console.log('🎯 No template data - using pre-configured assistant:', configuredAssistantId);
+        console.log('🎙️ Starting Vapi call with configured assistant...')
+        try {
+          await vapiRef.current.start(configuredAssistantId);
+          return;
+        } catch (assistantError) {
+          console.warn('❌ Failed to start with configured assistant:', assistantError);
+          console.warn('🔄 Falling back to basic config...');
+        }
+      } else {
+        console.warn('⚠️ No configured assistant ID found in environment variables');
+        console.warn('🔄 Using basic config fallback...');
+      }      // Final fallback: Basic assistant configuration
       const questions = templateQuestions && templateQuestions.length > 0 
         ? templateQuestions 
         : generateQuestionsForRole(position);
 
-      console.log('🎯 Template questions received:', templateQuestions);
+      console.log('🔄 Using final fallback configuration');
+      console.log('🎯 Template questions for fallback:', templateQuestions);
       console.log('🎯 Final questions to use:', questions);
+
+      // Build system prompt for fallback
+      let fallbackSystemPrompt = `You are a professional AI interviewer for the position: ${position}.`;
+      
+      if (templateInstruction) {
+        fallbackSystemPrompt += `\n\n**INTERVIEW INSTRUCTIONS:**\n${templateInstruction}`;
+      }
+      
+      fallbackSystemPrompt += `\n\n**IMPORTANT: Ask these specific questions during the interview:**
+${questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
+
+**Guidelines:**
+- Start with a warm greeting and introduction
+- Follow any instructions provided above
+- Ask the questions listed above in order, but keep the conversation natural
+- Ask relevant follow-up questions based on responses
+- Be professional, engaging, and encouraging
+- Allow the candidate to ask questions at the end
+- Conclude professionally
+
+Begin the interview now with a greeting.`;
 
       // Create a simple assistant config as fallback
       const assistantConfig = {
@@ -354,7 +438,8 @@ export const useVapi = (): UseVapiReturn => {
           provider: "deepgram" as const,
           model: "nova-2" as const,
           language: "en-US" as const
-        },        voice: {
+        },
+        voice: {
           provider: "11labs" as const,
           voiceId: "pNInz6obpgDQGcFmaJgB",
           stability: 0.6,
@@ -365,22 +450,10 @@ export const useVapi = (): UseVapiReturn => {
         model: {
           provider: "openai" as const,
           model: "gpt-4" as const,
-          temperature: 0.1,          messages: [{
+          temperature: 0.1,
+          messages: [{
             role: "system" as const,
-            content: `You are a professional AI interviewer for the position: ${position}. 
-
-**IMPORTANT: Ask these specific questions during the interview:**
-${questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
-
-**Instructions:**
-- Start with a warm greeting and introduction
-- Ask the questions above in order, but feel natural and conversational
-- Ask relevant follow-up questions based on responses
-- Be professional, engaging, and encouraging
-- Allow the candidate to ask questions at the end
-- Conclude professionally
-
-Begin the interview now with a greeting.`
+            content: fallbackSystemPrompt
           }]
         },
         firstMessage: `Hello! I'm your AI interviewer today. I'm excited to learn more about your background and experience for the ${position} position. Let's begin - could you please introduce yourself and tell me what interests you most about this role?`,
