@@ -57,6 +57,7 @@ model InterviewTemplate {
   title        String   // Template name/title
   name         String?  // Alias for title (for compatibility)
   description  String?
+  instruction  String?  // AI voice assistant instructions
   category     String?  // Template category (Technical, Leadership, etc.)
   difficulty   String?  // Beginner, Intermediate, Advanced
   duration     Int?     // Duration in minutes

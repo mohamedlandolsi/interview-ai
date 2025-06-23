@@ -4,6 +4,7 @@ export interface Template {
   id: string
   name: string
   description: string
+  instruction?: string
   category: string
   questions: number
   duration: number

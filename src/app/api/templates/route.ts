@@ -166,6 +166,7 @@ export async function POST(request: NextRequest) {
       name, 
       title, 
       description, 
+      instruction,
       category, 
       difficulty, 
       duration, 
@@ -180,14 +181,13 @@ export async function POST(request: NextRequest) {
         { error: 'Template name is required' },
         { status: 400 }
       )
-    }
-
-    // Create the template
+    }    // Create the template
     const template = await prisma.interviewTemplate.create({
       data: {
         title: templateName,
         name: templateName,
         description: description || null,
+        instruction: instruction || null,
         category: category || null,
         difficulty: difficulty || null,
         duration: duration || null,

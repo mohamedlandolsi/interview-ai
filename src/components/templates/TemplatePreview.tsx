@@ -370,11 +370,20 @@ export function TemplatePreview({ templateId, onBack, onEdit }: TemplatePreviewP
               </div>              <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total Time:</span>
                 <span className="font-medium">{template.duration || 0} min</span>
-              </div>
-              <div className="flex justify-between text-sm">
+              </div>              <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Total Points:</span>
                 <span className="font-medium">{totalPoints}</span>
               </div>
+              {template.instruction && (
+                <>
+                  <div className="pt-2 border-t">
+                    <div className="text-sm font-medium text-muted-foreground mb-2">AI Assistant Instructions:</div>
+                    <p className="text-xs text-muted-foreground bg-muted/20 p-2 rounded">
+                      {template.instruction}
+                    </p>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 

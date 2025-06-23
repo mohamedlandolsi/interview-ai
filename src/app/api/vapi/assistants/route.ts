@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     console.log('🔧 Vapi assistant request body:', JSON.stringify(body, null, 2))
     
-    const { candidateName, position, templateQuestions, companyName, interviewType } = body
+    const { candidateName, position, templateQuestions, templateInstruction, companyName, interviewType } = body
 
     if (!candidateName || !position) {
       console.error('❌ Missing required fields:', { candidateName, position })
@@ -17,12 +17,12 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('🎯 Creating assistant with VapiAssistantService...')
-    
-    // Create a new assistant with enhanced configuration
+      // Create a new assistant with enhanced configuration
     const assistant = await VapiAssistantService.createInterviewAssistant({
       candidateName,
       position,
       templateQuestions,
+      templateInstruction,
       companyName,
       interviewType
     })

@@ -44,7 +44,7 @@ export interface CallState {
 export interface UseVapiReturn {
   callState: CallState;
   startCall: (assistantId?: string) => Promise<void>;
-  startInterviewCall: (candidateName: string, position: string, templateQuestions?: string[]) => Promise<void>;
+  startInterviewCall: (candidateName: string, position: string, templateQuestions?: string[], templateInstruction?: string) => Promise<void>;
   endCall: () => void;
   toggleMute: () => void;
   isMuted: boolean;
@@ -239,7 +239,8 @@ export const useVapi = (): UseVapiReturn => {
   }, [volume]);  const startInterviewCall = useCallback(async (
     candidateName: string, 
     position: string, 
-    templateQuestions?: string[]
+    templateQuestions?: string[],
+    templateInstruction?: string
   ) => {
     console.log('🚀 Starting interview call with params:', { candidateName, position, templateQuestions: templateQuestions?.length || 0 });
     
@@ -313,11 +314,11 @@ export const useVapi = (): UseVapiReturn => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+          },          body: JSON.stringify({
             candidateName,
             position,
             templateQuestions,
+            templateInstruction,
             interviewType: 'general',
             sessionId // Pass session ID to assistant
           })

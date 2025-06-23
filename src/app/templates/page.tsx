@@ -110,33 +110,40 @@ export default function TemplatesPage() {
       difficulty: "All Levels" 
     })
   }
-
   if (isEditing) {
     return (
-      <TemplateEditor
-        templateId={selectedTemplate}
-        onBack={() => {
-          setIsEditing(false)
-          refreshTemplates() // Refresh templates when coming back from editor
-        }}
-        onSave={() => {
-          setIsEditing(false)
-          refreshTemplates() // Refresh templates after saving
-        }}
-      />
+      <DashboardRoute>
+        <DashboardLayout>
+          <TemplateEditor
+            templateId={selectedTemplate}
+            onBack={() => {
+              setIsEditing(false)
+              refreshTemplates() // Refresh templates when coming back from editor
+            }}
+            onSave={() => {
+              setIsEditing(false)
+              refreshTemplates() // Refresh templates after saving
+            }}
+          />
+        </DashboardLayout>
+      </DashboardRoute>
     )
   }
 
   if (isPreviewing && selectedTemplate) {
     return (
-      <TemplatePreview
-        templateId={selectedTemplate}
-        onBack={() => setIsPreviewing(false)}
-        onEdit={() => {
-          setIsPreviewing(false)
-          setIsEditing(true)
-        }}
-      />
+      <DashboardRoute>
+        <DashboardLayout>
+          <TemplatePreview
+            templateId={selectedTemplate}
+            onBack={() => setIsPreviewing(false)}
+            onEdit={() => {
+              setIsPreviewing(false)
+              setIsEditing(true)
+            }}
+          />
+        </DashboardLayout>
+      </DashboardRoute>
     )
   }
 

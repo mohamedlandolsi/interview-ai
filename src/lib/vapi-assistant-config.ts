@@ -25,8 +25,9 @@ interface VapiAnalysisConfig {
 export const createInterviewAssistantConfig = (
   candidateName: string,
   position: string,
-  templateQuestions: string[]
-) => {  const analysisConfig: VapiAnalysisConfig = {
+  templateQuestions: string[],
+  templateInstructions?: string
+) => {const analysisConfig: VapiAnalysisConfig = {
     summary: {
       enabled: true,
       prompt: `You are an expert interview analyst. Create a comprehensive Q&A summary of the job interview conversation.
@@ -279,24 +280,11 @@ Be thorough, objective, and provide actionable feedback.`
 Extract comprehensive structured data that enables informed hiring decisions.`
     }
   };
-
   const questionsList = templateQuestions.length > 0 
     ? templateQuestions.join('\n- ') 
     : 'Ask relevant questions for the position';
-  return {
-    name: `Interview Assistant for ${candidateName}`,
-    voice: {
-      provider: "11labs" as const,
-      voiceId: "sarah", // Professional, clear voice
-      optimizeStreaming: true
-    },
-    model: {
-      provider: "openai" as const,
-      model: "gpt-4" as const,
-      temperature: 0.1, // Low temperature for consistent, professional responses
-      messages: [{
-        role: "system" as const,
-        content: `You are an expert AI interviewer conducting a professional job interview for the position: ${position}.
+    
+  const systemContent = `You are an expert AI interviewer conducting a professional job interview for the position: ${position}.
 
 **Your Role:**
 - Conduct a structured yet conversational interview
@@ -316,7 +304,10 @@ Extract comprehensive structured data that enables informed hiring decisions.`
 **Key Questions to Cover:**
 ${questionsList}
 
-**Guidelines:**
+${templateInstructions ? `**Special Instructions:**
+${templateInstructions}
+
+` : ''}**Guidelines:**
 - Listen actively and ask relevant follow-ups
 - Keep responses concise but thorough
 - Maintain professional interview pace
@@ -331,7 +322,22 @@ ${questionsList}
 - Professional experience
 - Overall candidate suitability
 
-Begin with a professional greeting and position introduction.`
+Begin with a professional greeting and position introduction.`;
+
+  return {
+    name: `Interview Assistant for ${candidateName}`,
+    voice: {
+      provider: "11labs" as const,
+      voiceId: "sarah", // Professional, clear voice
+      optimizeStreaming: true
+    },
+    model: {
+      provider: "openai" as const,
+      model: "gpt-4" as const,
+      temperature: 0.1, // Low temperature for consistent, professional responses
+      messages: [{
+        role: "system" as const,
+        content: systemContent
       }]
     },
     

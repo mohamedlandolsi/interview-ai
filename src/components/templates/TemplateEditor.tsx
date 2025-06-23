@@ -39,13 +39,19 @@ import {
   Save,
   Eye,
   Copy,
-  Loader2
+  Loader2,
+  Sparkles
 } from "lucide-react"
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { SortableItem } from "@/components/templates/SortableItem"
 import { useTemplates } from "@/hooks/useTemplates"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 // Debounce utility function
 function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void {
@@ -59,6 +65,7 @@ function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (..
 const templateSchema = z.object({
   name: z.string().min(1, "Template name is required"),
   description: z.string().min(1, "Description is required"),
+  instruction: z.string().optional(),
   category: z.string().min(1, "Category is required"),
   difficulty: z.string().min(1, "Difficulty is required"),
   timeLimit: z.number().min(1).max(180),
@@ -92,6 +99,9 @@ export function TemplateEditor({ templateId, onBack, onSave }: TemplateEditorPro
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [aiPopoverOpen, setAiPopoverOpen] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState("")
+  const [generatingAI, setGeneratingAI] = useState(false)
   const { createTemplate, updateTemplate, getTemplate } = useTemplates()
   
   const sensors = useSensors(
@@ -100,12 +110,12 @@ export function TemplateEditor({ templateId, onBack, onSave }: TemplateEditorPro
       coordinateGetter: sortableKeyboardCoordinates,
     })
   )
-
   const form = useForm<TemplateFormData>({
     resolver: zodResolver(templateSchema),
     defaultValues: {
       name: "",
       description: "",
+      instruction: "",
       category: "",
       difficulty: "",
       timeLimit: 45,
@@ -120,10 +130,10 @@ export function TemplateEditor({ templateId, onBack, onSave }: TemplateEditorPro
         
         try {
           const template = await getTemplate(templateId)
-          if (template) {
-            // Populate form with existing template data
+          if (template) {            // Populate form with existing template data
             form.setValue("name", template.name)
             form.setValue("description", template.description || "")
+            form.setValue("instruction", template.instruction || "")
             form.setValue("category", template.category || "")
             form.setValue("difficulty", template.difficulty || "")
             form.setValue("timeLimit", template.duration || 45)
@@ -261,12 +271,12 @@ export function TemplateEditor({ templateId, onBack, onSave }: TemplateEditorPro
         ...(q.maxRating && { maxRating: q.maxRating }),
         // Add category and difficulty from template data
         category: data.category,
-        difficulty: data.difficulty
-      }))
+        difficulty: data.difficulty      }))
 
       const templateData = {
         name: data.name,
         description: data.description,
+        instruction: data.instruction,
         category: data.category,
         difficulty: data.difficulty as "Beginner" | "Intermediate" | "Advanced",
         duration: data.timeLimit,
@@ -294,11 +304,48 @@ export function TemplateEditor({ templateId, onBack, onSave }: TemplateEditorPro
       }
     } catch (err) {
       setError("An error occurred while saving the template")
-      console.error("Error saving template:", err)
-    } finally {
+      console.error("Error saving template:", err)    } finally {
       setSaving(false)
     }
   }
+  // AI instruction generation function
+  const generateAIInstructions = async () => {
+    if (!aiPrompt.trim()) return
+
+    setGeneratingAI(true)
+    try {
+      const formData = form.getValues()
+      const response = await fetch('/api/ai/generate-instructions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: aiPrompt,
+          templateName: formData.name,
+          category: formData.category,
+          difficulty: formData.difficulty,
+          position: formData.name // Using template name as position context
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        form.setValue('instruction', data.instructions)
+        setAiPopoverOpen(false)
+        setAiPrompt("")
+      } else {
+        const errorData = await response.json()
+        setError(errorData.error || 'Failed to generate instructions')
+      }
+    } catch (err) {
+      setError('Failed to generate AI instructions')
+      console.error('Error generating AI instructions:', err)
+    } finally {
+      setGeneratingAI(false)
+    }
+  }
+
   const totalPoints = questions.reduce((sum, q) => sum + q.points, 0)
   const estimatedTime = questions.reduce((sum, q) => sum + (q.timeLimit || 3), 0)
 
@@ -393,9 +440,7 @@ export function TemplateEditor({ templateId, onBack, onSave }: TemplateEditorPro
                             <FormMessage />
                           </FormItem>
                         )}
-                      />
-
-                      <FormField
+                      />                      <FormField
                         control={form.control}
                         name="description"
                         render={({ field }) => (
@@ -408,6 +453,84 @@ export function TemplateEditor({ templateId, onBack, onSave }: TemplateEditorPro
                                 {...field} 
                               />
                             </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />                      <FormField
+                        control={form.control}
+                        name="instruction"
+                        render={({ field }) => (
+                          <FormItem>
+                            <div className="flex items-center justify-between">                              <FormLabel>AI Assistant Instructions</FormLabel>
+                              <Popover open={aiPopoverOpen} onOpenChange={setAiPopoverOpen}>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="ml-2"
+                                  >
+                                    <Sparkles className="w-4 h-4 mr-1" />
+                                    Generate with AI
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-96 p-4" align="start">
+                                  <div className="space-y-4">
+                                    <div className="space-y-2">
+                                      <h4 className="font-medium text-sm">Generate AI Instructions</h4>
+                                      <p className="text-sm text-muted-foreground">
+                                        Describe what you want the AI interviewer to focus on, and we'll generate specific instructions.
+                                      </p>
+                                    </div>
+                                    <Textarea
+                                      placeholder="e.g., 'Focus on problem-solving skills for a senior software engineer role. Ask about system design and coding best practices.'"
+                                      value={aiPrompt}
+                                      onChange={(e) => setAiPrompt(e.target.value)}
+                                      className="min-h-[80px] resize-none"
+                                    />
+                                    <div className="flex gap-2">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                          setAiPopoverOpen(false)
+                                          setAiPrompt("")
+                                        }}
+                                      >
+                                        Cancel
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        onClick={generateAIInstructions}
+                                        disabled={!aiPrompt.trim() || generatingAI}
+                                      >
+                                        {generatingAI ? (
+                                          <>
+                                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                            Generating...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Sparkles className="w-3 h-3 mr-1" />
+                                            Generate
+                                          </>
+                                        )}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                            <FormControl>
+                              <Textarea 
+                                placeholder="Provide specific instructions for the AI voice assistant (e.g., 'Focus on technical skills and problem-solving abilities. Ask follow-up questions about specific technologies mentioned.')"
+                                className="min-h-[120px]"
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              These instructions guide the AI voice assistant on how to conduct the interview, what to focus on, and how to ask follow-up questions.
+                            </FormDescription>
                             <FormMessage />
                           </FormItem>
                         )}

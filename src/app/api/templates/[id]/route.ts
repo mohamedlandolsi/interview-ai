@@ -46,14 +46,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         { error: 'Template not found' },
         { status: 404 }
       )
-    }
-
-    // Transform the template to match the expected format
+    }    // Transform the template to match the expected format
     const transformedTemplate = {
       id: template.id,
       name: template.name || template.title,
       title: template.title,
       description: template.description,
+      instruction: template.instruction,
       category: template.category,
       difficulty: template.difficulty,
       duration: template.duration,
@@ -121,21 +120,21 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       name, 
       title, 
       description, 
+      instruction,
       category, 
       difficulty, 
       duration, 
       tags, 
       questions, 
       rawQuestions 
-    } = body
-
-    // Update the template
+    } = body    // Update the template
     const updatedTemplate = await prisma.interviewTemplate.update({
       where: { id: resolvedParams.id },
       data: {
         title: name || title || existingTemplate.title,
         name: name || title || existingTemplate.name || existingTemplate.title,
         description: description !== undefined ? description : existingTemplate.description,
+        instruction: instruction !== undefined ? instruction : existingTemplate.instruction,
         category: category || existingTemplate.category,
         difficulty: difficulty || existingTemplate.difficulty,
         duration: duration || existingTemplate.duration,
@@ -153,14 +152,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           }
         }
       }
-    })
-
-    // Transform the response to match expected format
+    })    // Transform the response to match expected format
     const transformedTemplate = {
       id: updatedTemplate.id,
       name: updatedTemplate.name || updatedTemplate.title,
       title: updatedTemplate.title,
       description: updatedTemplate.description,
+      instruction: updatedTemplate.instruction,
       category: updatedTemplate.category,
       difficulty: updatedTemplate.difficulty,
       duration: updatedTemplate.duration,

@@ -52,12 +52,12 @@ export const InterviewComponent: React.FC<InterviewComponentProps> = ({
     volume, 
     setVolume 
   } = useVapi();
-
   const { getTemplate } = useTemplates();
   const [lastDuration, setLastDuration] = useState<number>(0);
   const [templateData, setTemplateData] = useState<any>(null);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
   const [extractedQuestions, setExtractedQuestions] = useState<string[]>([]);
+  const [templateInstruction, setTemplateInstruction] = useState<string>('');
   // Format duration as MM:SS
   const formatDuration = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
@@ -67,18 +67,18 @@ export const InterviewComponent: React.FC<InterviewComponentProps> = ({
 
   // Fetch template data when templateId changes
   useEffect(() => {
-    const fetchTemplateData = async () => {
-      if (!templateId) {
+    const fetchTemplateData = async () => {      if (!templateId) {
         setTemplateData(null);
         setExtractedQuestions([]);
+        setTemplateInstruction('');
         return;
       }
 
       setLoadingTemplate(true);
-      try {
-        const template = await getTemplate(templateId);
+      try {        const template = await getTemplate(templateId);
         if (template) {
           setTemplateData(template);
+          setTemplateInstruction(template.instruction || '');
           
           // Extract questions from template
           let questions: string[] = [];
@@ -147,7 +147,7 @@ export const InterviewComponent: React.FC<InterviewComponentProps> = ({
       
       // Use enhanced analysis if candidate name and position are provided
       if (useEnhancedAnalysis && candidateName && position) {
-        await startInterviewCall(candidateName, position, questionsToUse);
+        await startInterviewCall(candidateName, position, questionsToUse, templateInstruction);
       } else {
         await startCall(assistantId);
       }

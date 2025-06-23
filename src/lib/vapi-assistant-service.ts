@@ -7,6 +7,7 @@ interface CreateAssistantParams {
   candidateName: string;
   position: string;
   templateQuestions?: string[];
+  templateInstruction?: string;
   companyName?: string;
   interviewType?: 'technical' | 'behavioral' | 'cultural' | 'general' | 'leadership' | 'sales';
 }
@@ -47,26 +48,7 @@ export class VapiAssistantService {
     }
     if (assistantName.length > 40) {
       assistantName = 'Interview Assistant';
-    }    const config = {
-      name: assistantName,
-      transcriber: {
-        provider: "deepgram" as const,
-        model: "nova-2" as const,
-        language: "en-US" as const
-      },      voice: {
-        provider: "11labs" as const,
-        voiceId: "pNInz6obpgDQGcFmaJgB",
-        stability: 0.6,
-        similarityBoost: 0.9,
-        style: 0.2,
-        useSpeakerBoost: true
-      },
-      model: {
-        provider: "openai" as const,
-        model: "gpt-4" as const,
-        temperature: 0.1,
-        messages: [{
-          role: "system" as const,          content: `You are an expert AI interviewer conducting a professional job interview for the position: ${params.position}.
+    }    const systemMessage = `You are an expert AI interviewer conducting a professional job interview for the position: ${params.position}.
 
 **Your Role:**
 - Conduct a structured yet conversational interview
@@ -87,7 +69,10 @@ export class VapiAssistantService {
 **SPECIFIC QUESTIONS TO ASK (Ask these questions in order):**
 - ${questionsList}
 
-**Additional Guidelines:**
+${params.templateInstruction ? `**SPECIAL INSTRUCTIONS:**
+${params.templateInstruction}
+
+` : ''}**Additional Guidelines:**
 - Listen actively and ask relevant follow-ups
 - Keep responses concise but thorough
 - Maintain professional interview pace
@@ -103,8 +88,31 @@ export class VapiAssistantService {
 - Professional experience
 - Overall candidate suitability
 
-Begin immediately with: "Hello! I'm your AI interviewer today. I'm excited to learn more about your background and experience for the ${params.position} position. Let's begin - could you please introduce yourself and tell me what interests you most about this role?"`
-        }]      },
+Begin with a professional greeting and position introduction.`;
+
+    const config = {
+      name: assistantName,
+      transcriber: {
+        provider: "deepgram" as const,
+        model: "nova-2" as const,
+        language: "en-US" as const
+      },
+      voice: {
+        provider: "11labs" as const,
+        voiceId: "pNInz6obpgDQGcFmaJgB",
+        stability: 0.6,
+        similarityBoost: 0.9,
+        style: 0.2,
+        useSpeakerBoost: true
+      },
+      model: {
+        provider: "openai" as const,
+        model: "gpt-4" as const,
+        temperature: 0.1,        messages: [{
+          role: "system" as const,
+          content: systemMessage
+        }]
+      },
       recordingEnabled: true,
       endCallMessage: "Thank you for your time today. We'll be in touch with next steps soon. Have a great day!",
       maxDurationSeconds: 3600,

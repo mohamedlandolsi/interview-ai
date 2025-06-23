@@ -17,32 +17,31 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { templateId, position, duration, description } = body
-
-    // Validate required fields
-    if (!templateId || !position) {
+    const { templateId, position, duration, description } = body    // Validate required fields
+    if (!position) {
       return NextResponse.json(
-        { error: 'Template ID and position are required' },
+        { error: 'Position is required' },
         { status: 400 }
       )
-    }
+    }    // Verify template exists and user has access to it (if templateId is provided)
+    let template = null
+    if (templateId) {
+      template = await prisma.interviewTemplate.findFirst({
+        where: {
+          id: templateId,
+          OR: [
+            { created_by: user.id },
+            { is_built_in: true }
+          ]
+        }
+      })
 
-    // Verify template exists and user has access to it
-    const template = await prisma.interviewTemplate.findFirst({
-      where: {
-        id: templateId,
-        OR: [
-          { created_by: user.id },
-          { is_built_in: true }
-        ]
+      if (!template) {
+        return NextResponse.json(
+          { error: 'Template not found or access denied' },
+          { status: 404 }
+        )
       }
-    })
-
-    if (!template) {
-      return NextResponse.json(
-        { error: 'Template not found or access denied' },
-        { status: 404 }
-      )
     }
 
     // Create interview session
@@ -54,17 +53,17 @@ export async function POST(request: NextRequest) {
         candidate_email: '', // Will be filled by candidate
         position: position,
         status: 'scheduled',
-        duration: duration || template.duration || 30,
+        duration: duration || (template?.duration) || 30,
         // Additional metadata for the session
         metrics: {
           sessionType: 'candidate_link',
           description: description || `Interview for ${position} position`,
           createdBy: user.id,
-          templateName: template.title
+          templateName: template?.title || 'General Interview'
         }
       },
       include: {
-        template: {
+        template: templateId ? {
           select: {
             id: true,
             title: true,
@@ -72,7 +71,7 @@ export async function POST(request: NextRequest) {
             difficulty: true,
             duration: true
           }
-        }
+        } : false
       }
     })
 

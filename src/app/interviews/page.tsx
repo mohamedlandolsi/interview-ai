@@ -180,7 +180,7 @@ const TemplateSelectionDialog = ({ isOpen, onClose, onSelectTemplate, onGenerate
   isOpen: boolean
   onClose: () => void
   onSelectTemplate: (templateId: string | null) => void
-  onGenerateLink: (templateId: string) => void
+  onGenerateLink: (templateId: string | null) => void
 }) => {
   const { templates, loading, error } = useTemplates()
   const [searchTerm, setSearchTerm] = useState("")
@@ -212,19 +212,31 @@ const TemplateSelectionDialog = ({ isOpen, onClose, onSelectTemplate, onGenerate
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-4">
-          {/* General Interview Option */}
+        <div className="space-y-4">          {/* General Interview Option */}
           <Card className="border-2 border-primary/20 hover:border-primary/40 transition-colors cursor-pointer"
-                onClick={() => handleStartInterview(null)}>
+                onClick={() => onGenerateLink(null)}>
             <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <Play className="w-6 h-6 text-primary" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <Share className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">General Interview</h3>
+                    <p className="text-sm text-muted-foreground">Generate a link for an open-ended interview without a specific template</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold">General Interview</h3>
-                  <p className="text-sm text-muted-foreground">Start an open-ended interview without a specific template</p>
-                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onGenerateLink(null)
+                  }}
+                >
+                  <Share className="w-4 h-4 mr-1" />
+                  Generate Link
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -289,15 +301,7 @@ const TemplateSelectionDialog = ({ isOpen, onClose, onSelectTemplate, onGenerate
                         <span>{template.duration} min</span>
                         <span>Used {template.usageCount} times</span>
                       </div>
-                    </div>
-                    <div className="flex flex-col gap-2">                      <Button 
-                        variant="default" 
-                        size="sm"
-                        onClick={() => onSelectTemplate(template.id)}
-                      >
-                        <Play className="w-4 h-4 mr-1" />
-                        Start Now
-                      </Button>
+                    </div>                    <div className="flex flex-col gap-2">
                       <Button 
                         variant="outline" 
                         size="sm"
@@ -354,9 +358,8 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
     
     fetchTemplate()
   }, [templateId, getTemplate])
-
   const handleGenerateLink = async () => {
-    if (!templateId || !position.trim()) return
+    if (!position.trim()) return
 
     setIsGenerating(true)
     try {
@@ -366,7 +369,7 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          templateId,
+          templateId: templateId || null, // Allow null for general interviews
           position: position.trim(),
           duration: parseInt(duration) || 30,
           description: description.trim() || `Interview for ${position} position`
@@ -420,9 +423,7 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
               <Loader2 className="w-6 h-6 animate-spin mr-2" />
               <span>Loading template...</span>
             </div>
-          )}
-
-          {templateData && !loading && (
+          )}          {templateData && !loading && (
             <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
               <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">
                 Template: {templateData.name}
@@ -435,6 +436,17 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
                 <Badge variant="outline">{templateData.difficulty}</Badge>
                 <Badge variant="outline">{templateData.questions} questions</Badge>
               </div>
+            </div>
+          )}
+
+          {!templateId && !loading && (
+            <div className="bg-green-50 dark:bg-green-950 p-4 rounded-lg border border-green-200 dark:border-green-800">
+              <h4 className="font-medium text-green-800 dark:text-green-200 mb-2">
+                General Interview
+              </h4>
+              <p className="text-sm text-green-700 dark:text-green-300">
+                Open-ended interview without a specific template. Perfect for flexible, conversational interviews.
+              </p>
             </div>
           )}
 
@@ -551,8 +563,7 @@ export default function InterviewsPage() {
       window.location.href = '/interviews/conduct'
     }
   }
-
-  const handleGenerateLink = (templateId: string) => {
+  const handleGenerateLink = (templateId: string | null) => {
     // Open link generation dialog
     setSelectedTemplateForLink(templateId)
     setIsLinkGenerationDialogOpen(true)
