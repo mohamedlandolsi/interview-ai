@@ -30,10 +30,19 @@ export async function GET(request: NextRequest) {
     if (type === 'custom') {
       whereConditions.created_by = user.id
     } else if (type === 'library') {
-      // For now, we'll consider templates created by the sample user as "library" templates
-      whereConditions.created_by = '00000000-0000-0000-0000-000000000001'
+      // Built-in templates or templates created by the system user
+      whereConditions.OR = [
+        { is_built_in: true },
+        { created_by: '00000000-0000-0000-0000-000000000001' }
+      ]
+    } else {
+      // For 'all' type, only show templates the user has access to
+      whereConditions.OR = [
+        { created_by: user.id }, // User's own templates
+        { is_built_in: true },   // Built-in templates
+        { created_by: '00000000-0000-0000-0000-000000000001' } // System templates
+      ]
     }
-    // If type === 'all', we don't add a created_by filter
 
     // Search filter
     if (search) {

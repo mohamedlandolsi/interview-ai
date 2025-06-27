@@ -336,6 +336,7 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
   const [description, setDescription] = useState("")
   const [generatedLink, setGeneratedLink] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Fetch template data when templateId changes
   useEffect(() => {
@@ -362,6 +363,7 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
     if (!position.trim()) return
 
     setIsGenerating(true)
+    setError(null)
     try {
       const response = await fetch('/api/interviews/links', {
         method: 'POST',
@@ -380,13 +382,21 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
         const data = await response.json()
         setGeneratedLink(data.session.link)
       } else {
-        const error = await response.json()
-        console.error('Failed to generate link:', error)
-        // TODO: Show error toast
+        const errorData = await response.json()
+        console.error('Failed to generate link:', errorData)
+        
+        // Set user-friendly error message
+        let errorMessage = errorData.error || 'Failed to generate interview link'
+        if (errorData.code === 'PROFILE_MISSING' || errorData.code === 'PROFILE_CREATION_FAILED') {
+          errorMessage = 'Account setup required. Please refresh the page and try again.'
+        } else if (errorData.code === 'TEMPLATE_ACCESS_DENIED') {
+          errorMessage = errorData.details || 'Template access denied. Try creating a general interview instead.'
+        }
+        setError(errorMessage)
       }
     } catch (error) {
       console.error('Error generating link:', error)
-      // TODO: Show error toast
+      setError('Network error. Please check your connection and try again.')
     } finally {
       setIsGenerating(false)
     }
@@ -404,6 +414,7 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
     setDuration("")
     setDescription("")
     setGeneratedLink("")
+    setError(null)
     onClose()
   }
 
@@ -482,6 +493,30 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
               />
             </div>
           </div>
+
+          {error && (
+            <div className="bg-red-50 dark:bg-red-950 p-4 rounded-lg border border-red-200 dark:border-red-800">
+              <h4 className="font-medium text-red-800 dark:text-red-200 mb-2">
+                Error
+              </h4>
+              <p className="text-sm text-red-700 dark:text-red-300 mb-3">
+                {error}
+              </p>
+              <Button 
+                onClick={() => {
+                  setError(null)
+                  if (position.trim()) {
+                    handleGenerateLink()
+                  }
+                }}
+                variant="outline" 
+                size="sm"
+                className="text-red-700 border-red-300 hover:bg-red-100"
+              >
+                Try Again
+              </Button>
+            </div>
+          )}
 
           {!generatedLink ? (
             <Button
