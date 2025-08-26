@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { getSessionByCallId } from '@/lib/interview-session'
 import { getSessionDefaults } from '@/lib/session-defaults'
 import { InterviewOrchestrator, VapiWebhookPayload } from '@/lib/interview-orchestrator'
+import { InterviewAnalysisService } from '@/lib/interview-analysis-service'
 
 // Types for Vapi webhook events
 interface VapiWebhookEvent {
@@ -133,7 +134,7 @@ const handleCallEnded = async (event: VapiWebhookEvent) => {
   
   try {
     // Update interview session with final data
-    await prisma.interviewSession.updateMany({
+    const updatedSessions = await prisma.interviewSession.updateMany({
       where: { vapi_call_id: event.call?.id },
       data: {
         status: 'completed',
@@ -147,6 +148,32 @@ const handleCallEnded = async (event: VapiWebhookEvent) => {
     })
     
     console.log('Interview session updated for ended call:', event.call?.id)
+
+    // Trigger post-interview analysis
+    if (updatedSessions.count > 0 && event.call?.id) {
+      console.log('🔍 Triggering post-interview analysis for call:', event.call.id)
+      
+      // Find the session to get its ID
+      const session = await prisma.interviewSession.findFirst({
+        where: { vapi_call_id: event.call.id }
+      })
+      
+      if (session) {
+        // Run analysis asynchronously to avoid blocking the webhook response
+        InterviewAnalysisService.generateAndSaveAnalysis(session.id)
+          .then((success) => {
+            if (success) {
+              console.log('✅ Post-interview analysis completed for session:', session.id)
+            } else {
+              console.error('❌ Post-interview analysis failed for session:', session.id)
+            }
+          })
+          .catch((error) => {
+            console.error('❌ Post-interview analysis error:', error)
+          })
+      }
+    }
+    
   } catch (error) {
     console.error('Error handling call end:', error)
   }

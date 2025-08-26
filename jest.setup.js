@@ -1,5 +1,36 @@
 import '@testing-library/jest-dom'
 
+// Polyfill for Next.js 15 Web APIs
+import { TextEncoder, TextDecoder } from 'util'
+global.TextEncoder = TextEncoder
+global.TextDecoder = TextDecoder
+
+// Mock Request and Response
+global.Request = class Request {
+  constructor(input, init = {}) {
+    this.url = typeof input === 'string' ? input : input.url
+    this.method = init.method || 'GET'
+    this.headers = new Map(Object.entries(init.headers || {}))
+    this.body = init.body
+  }
+}
+
+global.Response = class Response {
+  constructor(body, init = {}) {
+    this.body = body
+    this.status = init.status || 200
+    this.statusText = init.statusText || 'OK'
+    this.headers = new Map(Object.entries(init.headers || {}))
+  }
+  
+  static json(data, init) {
+    return new Response(JSON.stringify(data), {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) }
+    })
+  }
+}
+
 // Mock Next.js router
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(() => ({

@@ -53,8 +53,8 @@ Successfully implemented the core server-side logic for our AI-powered interview
 
 ### Environment Setup
 ```bash
-# Gemini API Key (added to .env.local)
-GEMINI_API_KEY="AIzaSyAUqA2tCrn_4ayvlEGJyojoNzJ0Aj5Vzyg"
+# Gemini API Key (add to .env.local - get your key from Google AI Studio)
+GEMINI_API_KEY="your_actual_gemini_api_key_here"
 ```
 
 ### Key Components

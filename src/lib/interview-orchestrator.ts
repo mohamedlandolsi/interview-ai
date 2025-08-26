@@ -52,7 +52,7 @@ interface QuestionObject {
 }
 
 export class InterviewOrchestrator {
-  private static genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'AIzaSyAUqA2tCrn_4ayvlEGJyojoNzJ0Aj5Vzyg')
+  private static genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
   /**
    * Main handler for Vapi webhook events
