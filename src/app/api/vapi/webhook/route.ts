@@ -4,6 +4,7 @@ import { createHmac } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { getSessionByCallId } from '@/lib/interview-session'
 import { getSessionDefaults } from '@/lib/session-defaults'
+import { InterviewOrchestrator, VapiWebhookPayload } from '@/lib/interview-orchestrator'
 
 // Types for Vapi webhook events
 interface VapiWebhookEvent {
@@ -394,7 +395,15 @@ export async function POST(request: NextRequest) {
     
     console.log('Received Vapi webhook:', event.type)
     
-    // Handle different event types
+    // First, let InterviewOrchestrator handle the event
+    const orchestratorResponse = await InterviewOrchestrator.handleVapiEvent(event as VapiWebhookPayload)
+    
+    // If orchestrator returns a response, return it immediately for assistant-request events
+    if (orchestratorResponse && event.type === 'assistant-request') {
+      return NextResponse.json(orchestratorResponse)
+    }
+    
+    // Handle different event types (legacy handlers for compatibility)
     switch (event.type) {
       case 'call-start':
         await handleCallStarted(event)
@@ -410,6 +419,10 @@ export async function POST(request: NextRequest) {
         
       case 'artifact':
         await handleArtifact(event)
+        break
+        
+      case 'assistant-request':
+        // Already handled by orchestrator above
         break
         
       case 'function-call':
@@ -432,7 +445,7 @@ export async function POST(request: NextRequest) {
         console.log('Unhandled event type:', event.type)
     }
     
-    // Return success response
+    // Return success response for non-assistant-request events
     return NextResponse.json({ 
       success: true,
       message: `Processed ${event.type} event` 

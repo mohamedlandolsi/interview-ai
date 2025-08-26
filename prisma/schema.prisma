@@ -95,6 +95,7 @@ model InterviewSession {
   duration         Int?             // Duration in minutes
   started_at       DateTime?
   completed_at     DateTime?
+  current_question_index Int      @default(0) // Track current question progress
 
   // Vapi Integration Fields
   vapi_call_id     String?          // Vapi call identifier
