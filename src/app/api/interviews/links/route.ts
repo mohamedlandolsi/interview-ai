@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    let { templateId, position, duration, description } = body
+    const { templateId, position, duration, description } = body
     
     console.log('📋 Request data:', { templateId, position, duration, description })
 

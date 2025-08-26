@@ -4,19 +4,22 @@
 
 /**
  * Gets the base URL for the application
- * Prioritizes:
- * 1. NEXT_PUBLIC_APP_URL (explicitly set)
- * 2. VERCEL_URL (automatically set by Vercel)
- * 3. Production URL (fallback for Vercel deployments)
- * 4. localhost (development fallback)
+ * Uses specific domains based on environment:
+ * - Development: http://localhost:3000
+ * - Production: https://interq.vercel.app
  */
 export function getBaseUrl(): string {
-  // For client-side, use window.location.origin
+  // For client-side, determine based on environment
   if (typeof window !== 'undefined') {
-    return window.location.origin
+    // Check if we're in development mode
+    if (process.env.NODE_ENV === 'development') {
+      return 'http://localhost:3000'
+    }
+    // In production, use the specific domain
+    return 'https://interq.vercel.app'
   }
 
-  // For server-side, check environment variables
+  // For server-side, check environment variables first, then fallback to our specific domains
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return process.env.NEXT_PUBLIC_APP_URL
   }
@@ -25,7 +28,7 @@ export function getBaseUrl(): string {
     return `https://${process.env.VERCEL_URL}`
   }
 
-  // Production fallback
+  // Production fallback - use the specific domain
   if (process.env.NODE_ENV === 'production') {
     return 'https://interq.vercel.app'
   }

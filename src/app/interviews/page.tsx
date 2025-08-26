@@ -18,7 +18,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import {
@@ -36,7 +35,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {   Plus, 
+import { 
+  Plus, 
   Search, 
   Calendar, 
   Clock, 
@@ -52,126 +52,32 @@ import {   Plus,
   FileText,
   Loader2,
   Share,
-  Copy
+  Copy,
+  Mail,
+  Timer,
+  Star,
+  Target,
+  TrendingUp,
+  MessageSquare
 } from "lucide-react"
 import { DashboardLayout } from "@/components/Layout"
-import { DashboardRoute } from "@/components/auth/ProtectedRoute"
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute"
 import { useTemplates } from "@/hooks/useTemplates"
+import { useInterviews } from "@/hooks/useInterviews"
 
-// Mock data
-const interviews = [
-  {
-    id: "INT-001",
-    candidateName: "Sarah Wilson",
-    candidateEmail: "sarah.wilson@email.com",
-    position: "Frontend Developer",
-    scheduledTime: "2024-06-17T10:00:00",
-    duration: 45,
-    status: "scheduled",
-    interviewer: "John Smith",
-    progress: 0,
-    transcript: "Interview hasn't started yet.",
-    notes: "Strong portfolio, experience with React and TypeScript"
-  },
-  {
-    id: "INT-002",
-    candidateName: "Michael Chen",
-    candidateEmail: "michael.chen@email.com",
-    position: "Product Manager",
-    scheduledTime: "2024-06-17T14:30:00",
-    duration: 60,
-    status: "in_progress",
-    interviewer: "Jane Doe",
-    progress: 65,
-    transcript: "Interviewer: Can you tell me about your experience with product roadmaps?\n\nCandidate: I've been working with product roadmaps for the past 3 years...",
-    notes: "Good communication skills, strong product sense"
-  },
-  {
-    id: "INT-003",
-    candidateName: "Emma Thompson",
-    candidateEmail: "emma.thompson@email.com",
-    position: "Backend Developer",
-    scheduledTime: "2024-06-16T09:00:00",
-    duration: 50,
-    status: "completed",
-    interviewer: "Mike Johnson",
-    progress: 100,
-    transcript: "Full interview transcript available. Candidate demonstrated strong technical skills...",
-    notes: "Excellent technical knowledge, good problem-solving approach"
-  },
-  {
-    id: "INT-004",
-    candidateName: "James Rodriguez",
-    candidateEmail: "james.rodriguez@email.com",
-    position: "UI/UX Designer",
-    scheduledTime: "2024-06-16T16:00:00",
-    duration: 40,
-    status: "failed",
-    interviewer: "Sarah Lee",
-    progress: 100,
-    transcript: "Interview completed but candidate did not meet requirements...",
-    notes: "Portfolio needs improvement, limited experience with design systems"
-  },
-  {
-    id: "INT-005",
-    candidateName: "Lisa Anderson",
-    candidateEmail: "lisa.anderson@email.com",
-    position: "Data Scientist",
-    scheduledTime: "2024-06-18T11:00:00",
-    duration: 55,
-    status: "scheduled",
-    interviewer: "David Wilson",
-    progress: 0,
-    transcript: "Interview scheduled for tomorrow.",
-    notes: "PhD in Statistics, 5 years industry experience"
-  },
-  {
-    id: "INT-006",
-    candidateName: "Robert Kim",
-    candidateEmail: "robert.kim@email.com",
-    position: "DevOps Engineer",
-    scheduledTime: "2024-06-17T15:30:00",
-    duration: 45,
-    status: "in_progress",
-    interviewer: "Alex Chen",
-    progress: 30,
-    transcript: "Interview in progress. Discussing Docker and Kubernetes experience...",
-    notes: "Strong infrastructure background, AWS certified"
-  }
-]
-
-const positions = ["All Positions", "Frontend Developer", "Backend Developer", "Product Manager", "UI/UX Designer", "Data Scientist", "DevOps Engineer"]
-const interviewers = ["All Interviewers", "John Smith", "Jane Doe", "Mike Johnson", "Sarah Lee", "David Wilson", "Alex Chen"]
-const statuses = ["All Status", "scheduled", "in_progress", "completed", "failed"]
-
+// Status badge component
 const getStatusBadge = (status: string) => {
   switch (status) {
-    case "scheduled":
-      return <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-100"><Clock className="w-3 h-3 mr-1" />Scheduled</Badge>
-    case "in_progress":
-      return <Badge variant="warning" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100"><Play className="w-3 h-3 mr-1" />In Progress</Badge>
-    case "completed":
-      return <Badge variant="success" className="bg-green-100 text-green-800 hover:bg-green-100"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>
-    case "failed":
-      return <Badge variant="destructive" className="bg-red-100 text-red-800 hover:bg-red-100"><XCircle className="w-3 h-3 mr-1" />Failed</Badge>
+    case "Scheduled":
+      return <Badge variant="secondary" className="bg-blue-100 text-blue-700">Scheduled</Badge>
+    case "In Progress":
+      return <Badge variant="secondary" className="bg-yellow-100 text-yellow-700">In Progress</Badge>
+    case "Completed":
+      return <Badge variant="secondary" className="bg-green-100 text-green-700">Completed</Badge>
+    case "Cancelled":
+      return <Badge variant="secondary" className="bg-red-100 text-red-700">Cancelled</Badge>
     default:
       return <Badge variant="outline">{status}</Badge>
-  }
-}
-
-const formatDateTime = (dateString: string) => {
-  const date = new Date(dateString)
-  return {
-    date: date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric' 
-    }),
-    time: date.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit',
-      hour12: true 
-    })
   }
 }
 
@@ -182,22 +88,26 @@ const TemplateSelectionDialog = ({ isOpen, onClose, onSelectTemplate, onGenerate
   onSelectTemplate: (templateId: string | null) => void
   onGenerateLink: (templateId: string | null) => void
 }) => {
-  const { templates, loading, error } = useTemplates()
+  const { templates, loading, error, refreshTemplates } = useTemplates()
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState("All Categories")
+  const [selectedCategory, setSelectedCategory] = useState("All")
 
-  // Filter templates
+  useEffect(() => {
+    if (isOpen) {
+      refreshTemplates()
+    }
+  }, [isOpen, refreshTemplates])
+
+  const categories = ["All", ...Array.from(new Set(templates.map(t => t.category)))]
+  
   const filteredTemplates = templates.filter(template => {
     const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          template.description.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = selectedCategory === "All Categories" || template.category === selectedCategory
+    const matchesCategory = selectedCategory === "All" || template.category === selectedCategory
     return matchesSearch && matchesCategory
   })
 
-  // Get unique categories
-  const categories = ["All Categories", ...Array.from(new Set(templates.map(t => t.category)))]
-
-  const handleStartInterview = (templateId: string | null) => {
+  const handleStartInterview = (templateId: string) => {
     onSelectTemplate(templateId)
     onClose()
   }
@@ -212,7 +122,8 @@ const TemplateSelectionDialog = ({ isOpen, onClose, onSelectTemplate, onGenerate
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-4">          {/* General Interview Option */}
+        <div className="space-y-4">
+          {/* General Interview Option */}
           <Card className="border-2 border-primary/20 hover:border-primary/40 transition-colors cursor-pointer"
                 onClick={() => onGenerateLink(null)}>
             <CardContent className="p-4">
@@ -284,7 +195,9 @@ const TemplateSelectionDialog = ({ isOpen, onClose, onSelectTemplate, onGenerate
                 <FileText className="w-8 h-8 mx-auto mb-2" />
                 <p>No templates found</p>
               </div>
-            )}            {filteredTemplates.map((template) => (
+            )}
+
+            {filteredTemplates.map((template) => (
               <Card key={template.id} 
                     className="hover:shadow-md transition-shadow border">
                 <CardContent className="p-4">
@@ -301,7 +214,8 @@ const TemplateSelectionDialog = ({ isOpen, onClose, onSelectTemplate, onGenerate
                         <span>{template.duration} min</span>
                         <span>Used {template.usageCount} times</span>
                       </div>
-                    </div>                    <div className="flex flex-col gap-2">
+                    </div>
+                    <div className="flex flex-col gap-2">
                       <Button 
                         variant="outline" 
                         size="sm"
@@ -331,39 +245,50 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
   const { getTemplate } = useTemplates()
   const [templateData, setTemplateData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
+  const [generatedLink, setGeneratedLink] = useState("")
+  const [isGenerating, setIsGenerating] = useState(false)
   const [position, setPosition] = useState("")
   const [duration, setDuration] = useState("")
   const [description, setDescription] = useState("")
-  const [generatedLink, setGeneratedLink] = useState("")
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  // Fetch template data when templateId changes
   useEffect(() => {
-    const fetchTemplate = async () => {
-      if (!templateId) return
-      
-      setLoading(true)
-      try {
-        const template = await getTemplate(templateId)
-        if (template) {
+    if (isOpen && templateId) {
+      const fetchTemplate = async () => {
+        setLoading(true)
+        try {
+          const template = await getTemplate(templateId)
           setTemplateData(template)
-          setDuration(template.duration?.toString() || '30')
+          setDuration(template.duration?.toString() || "30")
+        } catch (error) {
+          console.error('Error fetching template:', error)
+        } finally {
+          setLoading(false)
         }
-      } catch (error) {
-        console.error('Error fetching template:', error)
-      } finally {
-        setLoading(false)
       }
+
+      fetchTemplate()
+    } else if (isOpen) {
+      // Reset form for general interviews
+      setTemplateData(null)
+      setDuration("30")
     }
     
-    fetchTemplate()
-  }, [templateId, getTemplate])
-  const handleGenerateLink = async () => {
-    if (!position.trim()) return
+    // Reset form when dialog opens
+    if (isOpen) {
+      setPosition("")
+      setDescription("")
+      setGeneratedLink("")
+    }
+  }, [templateId, getTemplate, isOpen])
 
+  const generateInterviewLink = async () => {
+    if (!position.trim()) {
+      console.error("Position is required")
+      return
+    }
+    
     setIsGenerating(true)
-    setError(null)
+    
     try {
       const response = await fetch('/api/interviews/links', {
         method: 'POST',
@@ -371,55 +296,44 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          templateId: templateId || null, // Allow null for general interviews
+          templateId: templateId,
           position: position.trim(),
-          duration: parseInt(duration) || 30,
-          description: description.trim() || `Interview for ${position} position`
-        })
+          duration: duration ? parseInt(duration) : undefined,
+          description: description.trim() || undefined,
+        }),
       })
 
       if (response.ok) {
         const data = await response.json()
-        setGeneratedLink(data.session.link)
+        const fullLink = data.session.link
+        setGeneratedLink(fullLink)
+        console.log("Link Generated Successfully: Interview link has been created and is ready to share.")
       } else {
         const errorData = await response.json()
-        console.error('Failed to generate link:', errorData)
-        
-        // Set user-friendly error message
-        let errorMessage = errorData.error || 'Failed to generate interview link'
-        if (errorData.code === 'PROFILE_MISSING' || errorData.code === 'PROFILE_CREATION_FAILED') {
-          errorMessage = 'Account setup required. Please refresh the page and try again.'
+        if (errorData.code === 'TEMPLATE_NOT_FOUND') {
+          console.error("Template Not Found: The selected template could not be found. Please try again.")
         } else if (errorData.code === 'TEMPLATE_ACCESS_DENIED') {
-          errorMessage = errorData.details || 'Template access denied. Try creating a general interview instead.'
+          console.error("Access Denied: You don't have permission to use this template.")
         }
-        setError(errorMessage)
       }
     } catch (error) {
-      console.error('Error generating link:', error)
-      setError('Network error. Please check your connection and try again.')
+      console.error("Error: Failed to generate interview link. Please try again.")
     } finally {
       setIsGenerating(false)
     }
   }
 
-  const handleCopyLink = () => {
-    if (generatedLink) {
-      navigator.clipboard.writeText(generatedLink)
-      // TODO: Show success toast
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(generatedLink)
+      console.log("Copied! Interview link copied to clipboard.")
+    } catch (error) {
+      console.error("Error: Failed to copy link. Please copy manually.")
     }
   }
 
-  const handleClose = () => {
-    setPosition("")
-    setDuration("")
-    setDescription("")
-    setGeneratedLink("")
-    setError(null)
-    onClose()
-  }
-
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Generate Interview Link</DialogTitle>
@@ -428,146 +342,154 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-4">
+        <div className="space-y-6">
           {loading && (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="w-6 h-6 animate-spin mr-2" />
-              <span>Loading template...</span>
-            </div>
-          )}          {templateData && !loading && (
-            <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-              <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">
-                Template: {templateData.name}
-              </h4>
-              <p className="text-sm text-blue-700 dark:text-blue-300 mb-2">
-                {templateData.description}
-              </p>
-              <div className="flex gap-2 text-xs">
-                <Badge variant="secondary">{templateData.category}</Badge>
-                <Badge variant="outline">{templateData.difficulty}</Badge>
-                <Badge variant="outline">{templateData.questions} questions</Badge>
-              </div>
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin" />
+              <span className="ml-2">Loading template details...</span>
             </div>
           )}
 
-          {!templateId && !loading && (
-            <div className="bg-green-50 dark:bg-green-950 p-4 rounded-lg border border-green-200 dark:border-green-800">
-              <h4 className="font-medium text-green-800 dark:text-green-200 mb-2">
-                General Interview
-              </h4>
-              <p className="text-sm text-green-700 dark:text-green-300">
-                Open-ended interview without a specific template. Perfect for flexible, conversational interviews.
-              </p>
-            </div>
+          {templateData && !loading && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">{templateData.name}</CardTitle>
+                <CardDescription>{templateData.description}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-1">
+                    <FileText className="w-4 h-4" />
+                    <span>{templateData.questions} questions</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Clock className="w-4 h-4" />
+                    <span>{templateData.duration} minutes</span>
+                  </div>
+                  <Badge variant="secondary">{templateData.category}</Badge>
+                  <Badge variant="outline">{templateData.difficulty}</Badge>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">Position Title</label>
-              <Input
-                placeholder="e.g., Frontend Developer, Product Manager"
-                value={position}
-                onChange={(e) => setPosition(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Estimated Duration (minutes)</label>
-              <Input
-                type="number"
-                placeholder="30"
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Description (Optional)</label>
-              <Input
-                placeholder="Additional information for the candidate"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-          </div>
-
-          {error && (
-            <div className="bg-red-50 dark:bg-red-950 p-4 rounded-lg border border-red-200 dark:border-red-800">
-              <h4 className="font-medium text-red-800 dark:text-red-200 mb-2">
-                Error
-              </h4>
-              <p className="text-sm text-red-700 dark:text-red-300 mb-3">
-                {error}
-              </p>
-              <Button 
-                onClick={() => {
-                  setError(null)
-                  if (position.trim()) {
-                    handleGenerateLink()
-                  }
-                }}
-                variant="outline" 
-                size="sm"
-                className="text-red-700 border-red-300 hover:bg-red-100"
-              >
-                Try Again
-              </Button>
-            </div>
+          {!templateId && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">General Interview</CardTitle>
+                <CardDescription>
+                  Open-ended interview without a specific template. The AI will adapt questions based on the conversation.
+                </CardDescription>
+              </CardHeader>
+            </Card>
           )}
 
-          {!generatedLink ? (
-            <Button
-              onClick={handleGenerateLink}
-              disabled={!position.trim() || isGenerating}
-              className="w-full"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Generating Link...
-                </>
-              ) : (
-                <>
-                  <Share className="w-4 h-4 mr-2" />
-                  Generate Interview Link
-                </>
-              )}
-            </Button>
-          ) : (
-            <div className="space-y-3">
-              <div className="bg-green-50 dark:bg-green-950 p-4 rounded-lg border border-green-200 dark:border-green-800">
-                <h4 className="font-medium text-green-800 dark:text-green-200 mb-2">
-                  Interview Link Generated!
-                </h4>
-                <div className="flex items-center gap-2">
-                  <Input
+          {generatedLink ? (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Interview Link</label>
+                <div className="mt-1 flex gap-2">
+                  <Input 
                     value={generatedLink}
                     readOnly
-                    className="flex-1 font-mono text-sm"
+                    className="flex-1"
                   />
-                  <Button
-                    onClick={handleCopyLink}
+                  <Button 
                     variant="outline"
-                    size="sm"
+                    onClick={copyToClipboard}
+                    className="px-3"
                   >
                     <Copy className="w-4 h-4" />
                   </Button>
                 </div>
-                <p className="text-sm text-green-700 dark:text-green-300 mt-2">
-                  Send this link to the candidate. They'll fill out their information before starting the interview.
-                </p>
               </div>
               
-              <Button
-                onClick={handleClose}
-                variant="outline"
-                className="w-full"
-              >
-                Close
-              </Button>
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <h4 className="font-medium mb-2">Instructions for Candidates:</h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• Click the link to join the interview</li>
+                  <li>• Ensure you have a stable internet connection</li>
+                  <li>• Use a quiet environment for the best experience</li>
+                  <li>• Have your microphone ready</li>
+                </ul>
+              </div>
+
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => {
+                  setGeneratedLink("")
+                  setPosition("")
+                  setDescription("")
+                }}>
+                  Generate New Link
+                </Button>
+                <Button onClick={onClose}>
+                  Done
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Interview Details Form */}
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Position <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    placeholder="e.g. Software Engineer, Product Manager"
+                    value={position}
+                    onChange={(e) => setPosition(e.target.value)}
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Duration (minutes)
+                  </label>
+                  <Input
+                    type="number"
+                    placeholder="30"
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    min="10"
+                    max="120"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Description (optional)
+                  </label>
+                  <Input
+                    placeholder="Additional notes about this interview"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button 
+                  onClick={generateInterviewLink}
+                  disabled={isGenerating || !position.trim()}
+                  className="flex-1"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Share className="w-4 h-4 mr-2" />
+                      Generate Link
+                    </>
+                  )}
+                </Button>
+                <Button variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+              </div>
             </div>
           )}
         </div>
@@ -586,7 +508,35 @@ export default function InterviewsPage() {
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false)
   const [isLinkGenerationDialogOpen, setIsLinkGenerationDialogOpen] = useState(false)
   const [selectedTemplateForLink, setSelectedTemplateForLink] = useState<string | null>(null)
+  
+  // Delete-related state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [interviewToDelete, setInterviewToDelete] = useState<any>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  
+  // View-related state
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
+  const [interviewToView, setInterviewToView] = useState<any>(null)
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const itemsPerPage = 6
+
+  // Fetch interviews data dynamically
+  const { 
+    interviews, 
+    loading: interviewsLoading, 
+    error: interviewsError,
+    pagination,
+    refetch 
+  } = useInterviews({
+    page: currentPage,
+    limit: itemsPerPage,
+    search: searchTerm,
+    position: positionFilter,
+    status: statusFilter,
+    interviewer: interviewerFilter,
+    autoRefresh: true,
+    refreshInterval: 30000 // Refresh every 30 seconds to update status
+  })
 
   // Handler functions
   const handleTemplateSelection = (templateId: string | null) => {
@@ -598,6 +548,7 @@ export default function InterviewsPage() {
       window.location.href = '/interviews/conduct'
     }
   }
+  
   const handleGenerateLink = (templateId: string | null) => {
     // Open link generation dialog
     setSelectedTemplateForLink(templateId)
@@ -605,24 +556,13 @@ export default function InterviewsPage() {
     setIsTemplateDialogOpen(false)
   }
 
-  // Filter interviews
-  const filteredInterviews = interviews.filter(interview => {
-    const matchesSearch = interview.candidateName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         interview.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         interview.candidateEmail.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "All Status" || interview.status === statusFilter
-    const matchesPosition = positionFilter === "All Positions" || interview.position === positionFilter
-    const matchesInterviewer = interviewerFilter === "All Interviewers" || interview.interviewer === interviewerFilter
-    
-    return matchesSearch && matchesStatus && matchesPosition && matchesInterviewer
-  })
-
-  // Pagination
-  const totalPages = Math.ceil(filteredInterviews.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const paginatedInterviews = filteredInterviews.slice(startIndex, startIndex + itemsPerPage)
+  // Get dynamic positions and interviewers from the loaded interviews
+  const uniquePositions = ["All Positions", ...Array.from(new Set(interviews.map(i => i.position)))]
+  const uniqueInterviewers = ["All Interviewers", ...Array.from(new Set(interviews.map(i => i.interviewer)))]
+  
   const handleSelectInterview = (interviewId: string) => {
-    setSelectedInterviews(prev =>      prev.includes(interviewId) 
+    setSelectedInterviews(prev => 
+      prev.includes(interviewId) 
         ? prev.filter(id => id !== interviewId)
         : [...prev, interviewId]
     )
@@ -634,8 +574,86 @@ export default function InterviewsPage() {
     setSelectedInterviews([])
   }
 
+  // Delete functionality
+  const handleDeleteInterview = (interview: { id: string; candidateName?: string; position: string; status: string }) => {
+    setInterviewToDelete(interview)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const confirmDeleteInterview = async () => {
+    if (!interviewToDelete) return
+    
+    setIsDeleting(true)
+    
+    try {
+      const response = await fetch(`/api/interviews/${interviewToDelete.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        console.log("Interview deleted successfully")
+        setIsDeleteDialogOpen(false)
+        setInterviewToDelete(null)
+        // Refresh the interviews list
+        refetch()
+      } else {
+        const errorData = await response.json()
+        console.error("Error deleting interview:", errorData.error)
+        
+        if (errorData.code === 'INTERVIEW_IN_PROGRESS') {
+          console.error("Cannot delete an interview that is currently in progress")
+        } else {
+          console.error("Failed to delete interview. Please try again.")
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting interview:", error)
+      console.error("Failed to delete interview. Please try again.")
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const cancelDeleteInterview = () => {
+    setIsDeleteDialogOpen(false)
+    setInterviewToDelete(null)
+  }
+
+  // View functionality
+  const handleViewInterview = async (interview: { id: string }) => {
+    setInterviewToView(interview)
+    setIsViewDialogOpen(true)
+    setIsLoadingDetails(true)
+    
+    try {
+      // Fetch detailed interview data
+      const response = await fetch(`/api/interviews/${interview.id}`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        setInterviewToView(data.session)
+      } else {
+        console.error("Failed to fetch interview details")
+        // Use the basic interview data if API fails
+        setInterviewToView(interview)
+      }
+    } catch (error) {
+      console.error("Error fetching interview details:", error)
+      // Use the basic interview data if API fails
+      setInterviewToView(interview)
+    } finally {
+      setIsLoadingDetails(false)
+    }
+  }
+
+  const closeViewDialog = () => {
+    setIsViewDialogOpen(false)
+    setInterviewToView(null)
+    setIsLoadingDetails(false)
+  }
+
   return (
-    <DashboardRoute>
+    <ProtectedRoute>
       <DashboardLayout>
         <div className="space-y-6">
           {/* Page Header */}
@@ -645,7 +663,8 @@ export default function InterviewsPage() {
               <p className="text-muted-foreground">
                 Manage and monitor all candidate interviews
               </p>
-            </div>            <div className="flex gap-2">
+            </div>
+            <div className="flex gap-2">
               <Button variant="outline" onClick={() => window.location.href = '/interviews/demo'}>
                 <Play className="w-4 h-4 mr-2" />
                 Demo Interview
@@ -657,309 +676,605 @@ export default function InterviewsPage() {
             </div>
           </div>
 
-      {/* Filters and Search */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                <Input
-                  placeholder="Search candidates, positions, or emails..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-[140px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {statuses.map(status => (
-                    <SelectItem key={status} value={status}>{status}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={positionFilter} onValueChange={setPositionFilter}>
-                <SelectTrigger className="w-full sm:w-[160px]">
-                  <SelectValue placeholder="Position" />
-                </SelectTrigger>
-                <SelectContent>
-                  {positions.map(position => (
-                    <SelectItem key={position} value={position}>{position}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={interviewerFilter} onValueChange={setInterviewerFilter}>
-                <SelectTrigger className="w-full sm:w-[160px]">
-                  <SelectValue placeholder="Interviewer" />
-                </SelectTrigger>
-                <SelectContent>
-                  {interviewers.map(interviewer => (
-                    <SelectItem key={interviewer} value={interviewer}>{interviewer}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Bulk Actions */}
-      {selectedInterviews.length > 0 && (
-        <Card className="border-blue-200 bg-blue-50">
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">
-                {selectedInterviews.length} interview{selectedInterviews.length > 1 ? 's' : ''} selected
-              </span>
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => handleBulkAction('export')}
-                >
-                  <Download className="w-4 h-4 mr-1" />
-                  Export
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => handleBulkAction('reschedule')}
-                >
-                  <RefreshCw className="w-4 h-4 mr-1" />
-                  Reschedule
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => handleBulkAction('delete')}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <Trash2 className="w-4 h-4 mr-1" />
-                  Delete
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Interview Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {paginatedInterviews.map((interview) => {
-          const { date, time } = formatDateTime(interview.scheduledTime)
-          const isSelected = selectedInterviews.includes(interview.id)
-          
-          return (
-            <Card key={interview.id} className={`hover:shadow-md transition-shadow ${isSelected ? 'ring-2 ring-blue-500' : ''}`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={() => handleSelectInterview(interview.id)}
+          {/* Filters and Search */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col lg:flex-row gap-4">
+                {/* Search */}
+                <div className="flex-1 flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                    <Input
+                      placeholder="Search candidates, positions, or emails..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
                     />
-                    <div>
-                      <CardTitle className="text-lg">{interview.candidateName}</CardTitle>
-                      <CardDescription className="text-sm">{interview.candidateEmail}</CardDescription>
-                    </div>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            View Details
-                          </DropdownMenuItem>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-2xl">
-                          <DialogHeader>
-                            <DialogTitle>Interview Details - {interview.candidateName}</DialogTitle>
-                            <DialogDescription>
-                              {interview.position} • {interview.interviewer}
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <h4 className="font-semibold mb-1">Scheduled Time</h4>
-                                <p className="text-sm text-muted-foreground">{date} at {time}</p>
-                              </div>
-                              <div>
-                                <h4 className="font-semibold mb-1">Duration</h4>
-                                <p className="text-sm text-muted-foreground">{interview.duration} minutes</p>
-                              </div>
-                              <div>
-                                <h4 className="font-semibold mb-1">Status</h4>
-                                {getStatusBadge(interview.status)}
-                              </div>
-                              <div>
-                                <h4 className="font-semibold mb-1">Progress</h4>
-                                <div className="flex items-center gap-2">
-                                  <Progress value={interview.progress} className="flex-1" />
-                                  <span className="text-sm text-muted-foreground">{interview.progress}%</span>
-                                </div>
-                              </div>
-                            </div>
-                            <div>
-                              <h4 className="font-semibold mb-2">Notes</h4>
-                              <p className="text-sm text-muted-foreground">{interview.notes}</p>
-                            </div>
-                            <div>
-                              <h4 className="font-semibold mb-2">Transcript Preview</h4>
-                              <div className="bg-muted p-3 rounded-md max-h-32 overflow-y-auto">
-                                <p className="text-sm whitespace-pre-wrap">{interview.transcript}</p>
-                              </div>
-                            </div>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                      <DropdownMenuItem>
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Reschedule
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <Download className="mr-2 h-4 w-4" />
-                        Download Report
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-red-600">
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">{interview.position}</span>
-                  {getStatusBadge(interview.status)}
-                </div>
-                
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Calendar className="w-4 h-4" />
-                  <span>{date}</span>
-                  <Clock className="w-4 h-4 ml-2" />
-                  <span>{time}</span>
-                </div>
-                
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <User className="w-4 h-4" />
-                  <span>{interview.interviewer}</span>
-                  <span className="ml-auto">{interview.duration}min</span>
-                </div>
-                
-                {interview.status === 'in_progress' && interview.progress > 0 && (
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Progress</span>
-                      <span>{interview.progress}%</span>
-                    </div>
-                    <Progress value={interview.progress} className="h-1" />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-center">
-          <Pagination>
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious 
-                  href="#" 
-                  onClick={(e) => {
-                    e.preventDefault()
-                    if (currentPage > 1) setCurrentPage(currentPage - 1)
-                  }}
-                  className={currentPage <= 1 ? 'pointer-events-none opacity-50' : ''}
-                />
-              </PaginationItem>
-              
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <PaginationItem key={page}>
-                  <PaginationLink
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setCurrentPage(page)
-                    }}
-                    isActive={currentPage === page}
+                  <Button 
+                    variant="outline" 
+                    onClick={refetch}
+                    disabled={interviewsLoading}
+                    className="px-3"
                   >
-                    {page}
-                  </PaginationLink>
-                </PaginationItem>
-              ))}
+                    <RefreshCw className={`w-4 h-4 ${interviewsLoading ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
+                
+                {/* Filters */}
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All Status">All Status</SelectItem>
+                      <SelectItem value="Scheduled">Scheduled</SelectItem>
+                      <SelectItem value="In Progress">In Progress</SelectItem>
+                      <SelectItem value="Completed">Completed</SelectItem>
+                      <SelectItem value="Cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={positionFilter} onValueChange={setPositionFilter}>
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uniquePositions.map(position => (
+                        <SelectItem key={position} value={position}>{position}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={interviewerFilter} onValueChange={setInterviewerFilter}>
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uniqueInterviewers.map(interviewer => (
+                        <SelectItem key={interviewer} value={interviewer}>{interviewer}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Bulk Actions */}
+              {selectedInterviews.length > 0 && (
+                <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      {selectedInterviews.length} interview(s) selected
+                    </span>
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleBulkAction('export')}
+                      >
+                        <Download className="w-4 h-4 mr-1" />
+                        Export
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleBulkAction('delete')}
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Interviews List */}
+          <div className="space-y-4">
+            {/* Loading State */}
+            {interviewsLoading && (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center space-y-3">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10">
+                    <RefreshCw className="w-8 h-8 animate-spin text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-medium">Loading Interviews</p>
+                    <p className="text-sm text-muted-foreground">Fetching the latest interview data...</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Error State */}
+            {interviewsError && (
+              <Card className="border-destructive/50">
+                <CardContent className="pt-6">
+                  <div className="text-center space-y-3">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-destructive/10">
+                      <XCircle className="w-8 h-8 text-destructive" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-medium text-destructive">Error Loading Interviews</p>
+                      <p className="text-sm text-muted-foreground">{interviewsError}</p>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      onClick={refetch}
+                      className="mt-4"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Try Again
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Empty State */}
+            {!interviewsLoading && !interviewsError && interviews.length === 0 && (
+              <Card>
+                <CardContent className="pt-12 pb-12">
+                  <div className="text-center space-y-4">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted">
+                      <Calendar className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-medium">No Interviews Found</p>
+                      <p className="text-sm text-muted-foreground">
+                        {searchTerm || statusFilter !== "All Status" || positionFilter !== "All Positions" || interviewerFilter !== "All Interviewers"
+                          ? "No interviews match your current filters. Try adjusting your search criteria."
+                          : "Get started by creating your first interview."
+                        }
+                      </p>
+                    </div>
+                    <div className="flex gap-2 justify-center">
+                      {(searchTerm || statusFilter !== "All Status" || positionFilter !== "All Positions" || interviewerFilter !== "All Interviewers") && (
+                        <Button 
+                          variant="outline" 
+                          onClick={() => {
+                            setSearchTerm("")
+                            setStatusFilter("All Status")
+                            setPositionFilter("All Positions")
+                            setInterviewerFilter("All Interviewers")
+                          }}
+                        >
+                          Clear Filters
+                        </Button>
+                      )}
+                      <Button onClick={() => setIsTemplateDialogOpen(true)}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Start Interview
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Interviews Grid */}
+            {!interviewsLoading && !interviewsError && interviews.length > 0 && (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {interviews.map((interview) => (
+                  <Card key={interview.id} className="hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1 flex-1">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={selectedInterviews.includes(interview.id)}
+                              onCheckedChange={() => handleSelectInterview(interview.id)}
+                              className="mt-0.5"
+                            />
+                            <CardTitle className="text-lg leading-none">
+                              {interview.candidateName}
+                            </CardTitle>
+                          </div>
+                          <CardDescription className="text-sm">
+                            {interview.position}
+                          </CardDescription>
+                        </div>
+                        {getStatusBadge(interview.status)}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-muted-foreground" />
+                          <span>{interview.interviewer}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-muted-foreground" />
+                          <span>{new Date(interview.scheduledTime).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-muted-foreground" />
+                          <span>{new Date(interview.scheduledTime).toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2 pt-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={() => handleViewInterview(interview)}
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          View
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="px-2">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleViewInterview(interview)}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Download className="w-4 h-4 mr-2" />
+                              Export
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="text-destructive" onClick={() => handleDeleteInterview(interview)}>
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Pagination */}
+          {!interviewsLoading && !interviewsError && interviews.length > 0 && pagination && (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
+                {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
+                {pagination.total} interviews
+              </p>
               
-              <PaginationItem>
-                <PaginationNext 
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    if (currentPage < totalPages) setCurrentPage(currentPage + 1)
-                  }}
-                  className={currentPage >= totalPages ? 'pointer-events-none opacity-50' : ''}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
-      )}
-
-      {/* Empty State */}
-      {filteredInterviews.length === 0 && (
-        <Card className="text-center py-12">
-          <CardContent>
-            <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
-              <Search className="w-8 h-8 text-muted-foreground" />
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious 
+                      onClick={() => pagination.page > 1 && setCurrentPage(pagination.page - 1)}
+                      className={pagination.page <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => (
+                    <PaginationItem key={page}>
+                      <PaginationLink
+                        onClick={() => setCurrentPage(page)}
+                        isActive={page === pagination.page}
+                        className="cursor-pointer"
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext 
+                      onClick={() => pagination.page < pagination.totalPages && setCurrentPage(pagination.page + 1)}
+                      className={pagination.page >= pagination.totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
             </div>
-            <h3 className="text-lg font-semibold mb-2">No interviews found</h3>
-            <p className="text-muted-foreground mb-4">
-              Try adjusting your search or filter criteria
-            </p>            <Button variant="outline" onClick={() => {
-              setSearchTerm("")
-              setStatusFilter("All Status")
-              setPositionFilter("All Positions")
-              setInterviewerFilter("All Interviewers")
-            }}>
-              Clear Filters
-            </Button>          </CardContent>
-        </Card>
-      )}
-        </div>        {/* Template Selection Dialog */}
-        <TemplateSelectionDialog 
-          isOpen={isTemplateDialogOpen}
-          onClose={() => setIsTemplateDialogOpen(false)}
-          onSelectTemplate={handleTemplateSelection}
-          onGenerateLink={handleGenerateLink}
-        />
+          )}
 
-        {/* Link Generation Dialog */}
-        <LinkGenerationDialog
-          isOpen={isLinkGenerationDialogOpen}
-          onClose={() => setIsLinkGenerationDialogOpen(false)}
-          templateId={selectedTemplateForLink}
-        />
+          {/* Template Selection Dialog */}
+          <TemplateSelectionDialog
+            isOpen={isTemplateDialogOpen}
+            onClose={() => setIsTemplateDialogOpen(false)}
+            onSelectTemplate={handleTemplateSelection}
+            onGenerateLink={handleGenerateLink}
+          />
+
+          {/* Link Generation Dialog */}
+          <LinkGenerationDialog
+            isOpen={isLinkGenerationDialogOpen}
+            onClose={() => setIsLinkGenerationDialogOpen(false)}
+            templateId={selectedTemplateForLink}
+          />
+
+          {/* Delete Confirmation Dialog */}
+          <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Delete Interview</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete this interview? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              
+              {interviewToDelete && (
+                <div className="space-y-2 p-4 bg-muted/50 rounded-lg">
+                  <div className="text-sm">
+                    <span className="font-medium">Candidate:</span> {interviewToDelete.candidateName || 'Not specified'}
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-medium">Position:</span> {interviewToDelete.position}
+                  </div>
+                  <div className="text-sm">
+                    <span className="font-medium">Status:</span> {interviewToDelete.status}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end">
+                <Button 
+                  variant="outline" 
+                  onClick={cancelDeleteInterview}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="destructive" 
+                  onClick={confirmDeleteInterview}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete
+                    </>
+                  )}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* View Interview Details Dialog */}
+          <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Eye className="w-5 h-5" />
+                  Interview Details
+                </DialogTitle>
+                <DialogDescription>
+                  Complete information about this interview session
+                </DialogDescription>
+              </DialogHeader>
+              
+              {isLoadingDetails ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                  <span>Loading interview details...</span>
+                </div>
+              ) : interviewToView ? (
+                <div className="space-y-6 overflow-y-auto max-h-[70vh]">
+                  {/* Basic Information */}
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <User className="w-5 h-5" />
+                          Candidate Information
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-muted-foreground" />
+                          <span className="font-medium">Name:</span>
+                          <span>{interviewToView.candidateName || 'Not provided'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Mail className="w-4 h-4 text-muted-foreground" />
+                          <span className="font-medium">Email:</span>
+                          <span>{interviewToView.candidateEmail || 'Not provided'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Target className="w-4 h-4 text-muted-foreground" />
+                          <span className="font-medium">Position:</span>
+                          <span>{interviewToView.position}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Calendar className="w-5 h-5" />
+                          Interview Details
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">Status:</span>
+                          {getStatusBadge(interviewToView.status)}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Timer className="w-4 h-4 text-muted-foreground" />
+                          <span className="font-medium">Duration:</span>
+                          <span>{interviewToView.duration} minutes</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-muted-foreground" />
+                          <span className="font-medium">Created:</span>
+                          <span>{new Date(interviewToView.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        {interviewToView.startedAt && (
+                          <div className="flex items-center gap-2">
+                            <Play className="w-4 h-4 text-muted-foreground" />
+                            <span className="font-medium">Started:</span>
+                            <span>{new Date(interviewToView.startedAt).toLocaleString()}</span>
+                          </div>
+                        )}
+                        {interviewToView.completedAt && (
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4 text-muted-foreground" />
+                            <span className="font-medium">Completed:</span>
+                            <span>{new Date(interviewToView.completedAt).toLocaleString()}</span>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Template Information */}
+                  {interviewToView.template && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <FileText className="w-5 h-5" />
+                          Interview Template
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div>
+                            <span className="font-medium">Template:</span>
+                            <p className="text-sm text-muted-foreground mt-1">{interviewToView.template.title || interviewToView.template.name}</p>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <Badge variant="secondary">{interviewToView.template.category}</Badge>
+                            <Badge variant="outline">{interviewToView.template.difficulty}</Badge>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Performance Metrics */}
+                  {interviewToView.overallScore !== null && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <TrendingUp className="w-5 h-5" />
+                          Performance Summary
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-2">
+                            <Star className="w-4 h-4 text-yellow-500" />
+                            <span className="font-medium">Overall Score:</span>
+                            <Badge variant={interviewToView.overallScore >= 80 ? "default" : interviewToView.overallScore >= 60 ? "secondary" : "destructive"}>
+                              {interviewToView.overallScore}%
+                            </Badge>
+                          </div>
+                        </div>
+                        
+                        {interviewToView.analysis_score && (
+                          <div className="space-y-2">
+                            <span className="font-medium">AI Analysis Score:</span>
+                            <Progress value={interviewToView.analysis_score} className="w-full" />
+                            <p className="text-sm text-muted-foreground">{interviewToView.analysis_score}% based on AI evaluation</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* AI Insights */}
+                  {(interviewToView.strengths || interviewToView.areas_for_improvement || interviewToView.key_insights) && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <MessageSquare className="w-5 h-5" />
+                          AI Analysis
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {interviewToView.strengths && (
+                          <div>
+                            <h4 className="font-medium text-green-600 mb-2">Strengths</h4>
+                            <p className="text-sm text-muted-foreground">{interviewToView.strengths}</p>
+                          </div>
+                        )}
+                        
+                        {interviewToView.areas_for_improvement && (
+                          <div>
+                            <h4 className="font-medium text-orange-600 mb-2">Areas for Improvement</h4>
+                            <p className="text-sm text-muted-foreground">{interviewToView.areas_for_improvement}</p>
+                          </div>
+                        )}
+                        
+                        {interviewToView.key_insights && (
+                          <div>
+                            <h4 className="font-medium text-blue-600 mb-2">Key Insights</h4>
+                            <p className="text-sm text-muted-foreground">{interviewToView.key_insights}</p>
+                          </div>
+                        )}
+                        
+                        {interviewToView.hiring_recommendation && (
+                          <div>
+                            <h4 className="font-medium mb-2">Hiring Recommendation</h4>
+                            <Badge variant={interviewToView.hiring_recommendation === 'HIRE' ? "default" : interviewToView.hiring_recommendation === 'CONSIDER' ? "secondary" : "destructive"}>
+                              {interviewToView.hiring_recommendation}
+                            </Badge>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Technical Details */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Technical Information</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <span className="font-medium">Interview ID:</span>
+                          <p className="text-muted-foreground font-mono text-xs">{interviewToView.id}</p>
+                        </div>
+                        {interviewToView.template && (
+                          <div>
+                            <span className="font-medium">Template ID:</span>
+                            <p className="text-muted-foreground font-mono text-xs">{interviewToView.templateId}</p>
+                          </div>
+                        )}
+                      </div>
+                      {interviewToView.vapi_call_id && (
+                        <div>
+                          <span className="font-medium">Vapi Call ID:</span>
+                          <p className="text-muted-foreground font-mono text-xs">{interviewToView.vapi_call_id}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">No interview details available</p>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={closeViewDialog}>
+                  Close
+                </Button>
+                {interviewToView?.status === 'completed' && (
+                  <Button variant="default">
+                    <Download className="w-4 h-4 mr-2" />
+                    Export Report
+                  </Button>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </DashboardLayout>
-    </DashboardRoute>
+    </ProtectedRoute>
   )
 }
