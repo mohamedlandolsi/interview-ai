@@ -6,10 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
 import { 
   Dialog,
   DialogContent,
@@ -34,38 +34,24 @@ import * as z from 'zod'
 import { 
   Upload, 
   User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Calendar,
   Camera,
   Save,
   Eye,
   EyeOff,
   Loader2,
-  Check,
-  X,
   AlertTriangle,
-  Trash2
+  Trash2,
+  Building2
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
-
-// Toast notification state type
-interface ToastNotification {
-  message: string
-  type: 'success' | 'error' | 'info'
-}
 
 const profileFormSchema = z.object({
   full_name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Invalid email address'),
-  phone: z.string().optional(),
   company_name: z.string().optional(),
   department: z.string().optional(),
+  phone: z.string().optional(),
 })
 
 const passwordFormSchema = z.object({
-  currentPassword: z.string().min(1, 'Current password is required'),
   newPassword: z.string().min(8, 'Password must be at least 8 characters'),
   confirmPassword: z.string().min(1, 'Please confirm your password'),
 }).refine((data) => data.newPassword === data.confirmPassword, {
@@ -77,46 +63,34 @@ type ProfileFormValues = z.infer<typeof profileFormSchema>
 type PasswordFormValues = z.infer<typeof passwordFormSchema>
 
 export function ProfileSettings() {
-  const { user, profile, updateProfile, signOut } = useAuth()
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const { user, profile, refreshProfile, signOut } = useAuth()
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [profileSaving, setProfileSaving] = useState(false)
   const [passwordChanging, setPasswordChanging] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
-  const [notification, setNotification] = useState<ToastNotification | null>(null)
+  const [avatarRefreshKey, setAvatarRefreshKey] = useState(0) // Force avatar refresh
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Auto-hide notification after 5 seconds
-  React.useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => setNotification(null), 5000)
-      return () => clearTimeout(timer)
-    }
-  }, [notification])
-
-  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
-    setNotification({ message, type })
-  }
+  // Initialize forms
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
       full_name: profile?.full_name || '',
-      email: user?.email || '',
-      phone: profile?.phone || '',
       company_name: profile?.company_name || '',
       department: profile?.department || '',
+      phone: profile?.phone || '',
     },
   })
 
   const passwordForm = useForm<PasswordFormValues>({
     resolver: zodResolver(passwordFormSchema),
     defaultValues: {
-      currentPassword: '',
       newPassword: '',
       confirmPassword: '',
     },
@@ -127,244 +101,295 @@ export function ProfileSettings() {
     if (profile) {
       profileForm.reset({
         full_name: profile.full_name || '',
-        email: user?.email || '',
-        phone: profile.phone || '',
         company_name: profile.company_name || '',
         department: profile.department || '',
+        phone: profile.phone || '',
       })
     }
-  }, [profile, user, profileForm])
+  }, [profile, profileForm])
 
-  // Upload avatar to Supabase storage
-  const uploadAvatar = async (file: File): Promise<string | null> => {
-    try {
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${user?.id}-${Date.now()}.${fileExt}`
-      const filePath = `avatars/${fileName}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
-        })
-
-      if (uploadError) {
-        console.error('Upload error:', uploadError)
-        return null
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath)
-
-      return publicUrl
-    } catch (error) {
-      console.error('Avatar upload error:', error)
-      return null
-    }
-  }
-
-  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle avatar file selection and preview
+  const handleAvatarSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file) return    // Validate file size (2MB max)
-    if (file.size > 2 * 1024 * 1024) {
-      showToast('File size must be less than 2MB', 'error')
+    if (!file) return
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File size must be less than 5MB')
       return
     }
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      showToast('Please select an image file', 'error')
+      toast.error('Please select an image file')
       return
-    }    setAvatarFile(file)
+    }
+
+    setAvatarFile(file)
+    
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file)
+    setAvatarPreview(previewUrl)
+  }
+
+  // Upload avatar to server
+  const handleAvatarUpload = async () => {
+    if (!avatarFile) return
+
     setAvatarUploading(true)
 
     try {
-      const avatarUrl = await uploadAvatar(file)
-      if (avatarUrl) {
-        const { error } = await updateProfile({ avatar_url: avatarUrl })
-        if (error) {
-          showToast('Failed to update avatar', 'error')
-        } else {
-          showToast('Avatar updated successfully', 'success')
-        }
+      const formData = new FormData()
+      formData.append('avatar', avatarFile)
+
+      const response = await fetch('/api/profile/avatar', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        toast.success('Avatar updated successfully')
+        // Force a hard refresh of the profile data
+        await refreshProfile()
+        // Clear the preview and file state
+        setAvatarFile(null)
+        setAvatarPreview(null)
+        // Force avatar refresh by updating key
+        setAvatarRefreshKey(prev => prev + 1)
       } else {
-        showToast('Failed to upload avatar', 'error')
+        toast.error(result.error || 'Failed to upload avatar')
       }
     } catch (error) {
-      showToast('Failed to upload avatar', 'error')
+      console.error('Avatar upload error:', error)
+      toast.error('Failed to upload avatar')
     } finally {
       setAvatarUploading(false)
     }
   }
 
+  // Delete avatar
+  const handleAvatarDelete = async () => {
+    try {
+      const response = await fetch('/api/profile/avatar', {
+        method: 'DELETE',
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        toast.success('Avatar deleted successfully')
+        await refreshProfile()
+        // Force avatar refresh
+        setAvatarRefreshKey(prev => prev + 1)
+      } else {
+        toast.error(result.error || 'Failed to delete avatar')
+      }
+    } catch (error) {
+      console.error('Avatar delete error:', error)
+      toast.error('Failed to delete avatar')
+    }
+  }
+
+  // Handle profile form submission
   const onProfileSubmit = async (data: ProfileFormValues) => {
     setProfileSaving(true)
     
-    // Optimistically update the form
-    const originalData = profileForm.getValues()
-    
     try {
-      const { error } = await updateProfile(data)
-      if (error) {
-        // Revert to original data on error
-        profileForm.reset(originalData)
-        showToast('Failed to update profile', 'error')
+      const response = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        toast.success('Profile updated successfully')
+        await refreshProfile()
       } else {
-        showToast('Profile updated successfully', 'success')
+        toast.error(result.error || 'Failed to update profile')
       }
     } catch (error) {
-      // Revert to original data on error
-      profileForm.reset(originalData)
-      showToast('Failed to update profile', 'error')
+      console.error('Profile update error:', error)
+      toast.error('Failed to update profile')
     } finally {
       setProfileSaving(false)
     }
   }
 
+  // Handle password change
   const onPasswordSubmit = async (data: PasswordFormValues) => {
     setPasswordChanging(true)
+    
     try {
-      // First verify current password by attempting to sign in
-      const { error: signInError } = await supabase.auth.signInWithPassword({        email: user?.email || '',
-        password: data.currentPassword
+      const response = await fetch('/api/profile/password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ newPassword: data.newPassword }),
       })
 
-      if (signInError) {
-        showToast('Current password is incorrect', 'error')
-        return
-      }
+      const result = await response.json()
 
-      // Update password
-      const { error } = await supabase.auth.updateUser({
-        password: data.newPassword
-      })
-
-      if (error) {
-        showToast('Failed to update password', 'error')
-      } else {
-        showToast('Password updated successfully', 'success')
+      if (response.ok) {
+        toast.success('Password updated successfully')
         passwordForm.reset()
+      } else {
+        toast.error(result.error || 'Failed to update password')
       }
     } catch (error) {
-      showToast('Failed to update password', 'error')
+      console.error('Password update error:', error)
+      toast.error('Failed to update password')
     } finally {
       setPasswordChanging(false)
     }
   }
+
+  // Handle account deletion
   const handleDeleteAccount = async () => {
     if (deleteConfirmation !== 'DELETE') {
-      showToast('Please type DELETE to confirm', 'error')
+      toast.error('Please type "DELETE" to confirm')
       return
     }
 
     setDeleting(true)
+
     try {
-      // Delete user account
-      const { error } = await supabase.auth.admin.deleteUser(user?.id || '')
-      
-      if (error) {
-        showToast('Failed to delete account', 'error')
-      } else {
-        showToast('Account deleted successfully', 'success')
+      const response = await fetch('/api/profile/delete', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ confirmation: deleteConfirmation }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        toast.success('Account deleted successfully')
+        // Sign out and redirect
         await signOut()
+        window.location.href = '/'
+      } else {
+        toast.error(result.error || 'Failed to delete account')
       }
     } catch (error) {
-      showToast('Failed to delete account', 'error')
+      console.error('Account deletion error:', error)
+      toast.error('Failed to delete account')
     } finally {
       setDeleting(false)
       setShowDeleteDialog(false)
+      setDeleteConfirmation('')
     }
   }
 
+  // Get avatar URL for display
   const getAvatarUrl = () => {
-    if (avatarFile) {
-      return URL.createObjectURL(avatarFile)
+    if (avatarPreview) return avatarPreview
+    // Add cache busting parameter to force reload
+    const baseUrl = profile?.avatar_url || ''
+    if (baseUrl && !baseUrl.includes('?')) {
+      return `${baseUrl}?v=${avatarRefreshKey}&t=${new Date().getTime()}`
     }
-    return profile?.avatar_url || ''
+    return baseUrl
   }
 
+  // Get initials for avatar fallback
   const getInitials = () => {
     const name = profile?.full_name || user?.email || 'User'
-    return name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()      .slice(0, 2)
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+  }
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
-      {/* Toast Notification */}
-      {notification && (
-        <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg border ${
-          notification.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
-          notification.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
-          'bg-blue-50 border-blue-200 text-blue-800'
-        }`}>
-          <div className="flex items-center gap-2">
-            {notification.type === 'success' && <Check className="h-4 w-4" />}
-            {notification.type === 'error' && <X className="h-4 w-4" />}
-            {notification.type === 'info' && <AlertTriangle className="h-4 w-4" />}
-            <span className="text-sm font-medium">{notification.message}</span>
-          </div>
-        </div>
-      )}
-      {/* Profile Information */}
+      {/* Profile Information Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Profile Information</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <User className="h-5 w-5" />
+            Profile Information
+          </CardTitle>
           <CardDescription>
-            Update your personal information and profile details.
+            Update your personal information and contact details.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Avatar Section */}
           <div className="flex items-center gap-6">
             <div className="relative">
-              <Avatar className="h-24 w-24">
-                <AvatarImage 
-                  src={getAvatarUrl()} 
-                  alt="Profile picture" 
-                />
-                <AvatarFallback className="text-lg">{getInitials()}</AvatarFallback>
+              <Avatar className="h-20 w-20" key={`avatar-${avatarRefreshKey}`}>
+                <AvatarImage src={getAvatarUrl()} alt="Profile picture" />
+                <AvatarFallback className="text-lg">
+                  {getInitials()}
+                </AvatarFallback>
               </Avatar>
-              <Label 
-                htmlFor="avatar-upload" 
-                className="absolute -bottom-2 -right-2 h-8 w-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center cursor-pointer hover:bg-primary/90 transition-colors disabled:opacity-50"
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={avatarUploading}
               >
-                {avatarUploading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Camera className="h-4 w-4" />
-                )}
-                <Input
-                  ref={fileInputRef}
-                  id="avatar-upload"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleAvatarUpload}
-                  disabled={avatarUploading}
-                />
-              </Label>
+                <Camera className="h-4 w-4" />
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarSelect}
+              />
             </div>
-            <div className="space-y-2">
-              <h3 className="text-lg font-semibold">Profile Picture</h3>
-              <p className="text-sm text-muted-foreground">
-                Upload a new avatar. JPG, PNG or GIF. Max size 2MB.
-              </p>
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">
+                  {profile?.role || 'interviewer'}
+                </Badge>
+                {profile?.email_verified && (
+                  <Badge variant="outline" className="text-green-600">
+                    Verified
+                  </Badge>
+                )}
+              </div>
               <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={avatarUploading}
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  {avatarUploading ? 'Uploading...' : 'Upload Image'}
-                </Button>
+                {avatarFile && (
+                  <Button
+                    size="sm"
+                    onClick={handleAvatarUpload}
+                    disabled={avatarUploading}
+                  >
+                    {avatarUploading ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Upload className="h-4 w-4 mr-2" />
+                    )}
+                    Upload
+                  </Button>
+                )}
+                {profile?.avatar_url && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleAvatarDelete}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Remove
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -388,58 +413,28 @@ export function ProfileSettings() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={profileForm.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Enter your email" {...field} disabled />
-                      </FormControl>
-                      <FormDescription>
-                        Email cannot be changed from this form. Contact support if needed.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <FormItem>
+                  <FormLabel>Email Address</FormLabel>
+                  <FormControl>
+                    <Input 
+                      value={user?.email || ''} 
+                      disabled 
+                      className="bg-muted"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Email cannot be changed here. Contact support if needed.
+                  </FormDescription>
+                </FormItem>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={profileForm.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Phone Number</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Enter your phone number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={profileForm.control}
                   name="company_name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Company</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Enter your company name" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={profileForm.control}
-                  name="company_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Company</FormLabel>
+                      <FormLabel>Company Name</FormLabel>
                       <FormControl>
                         <Input placeholder="Enter your company name" {...field} />
                       </FormControl>
@@ -462,27 +457,38 @@ export function ProfileSettings() {
                 />
               </div>
 
-              <div className="flex justify-end">
-                <Button type="submit" disabled={profileSaving}>
-                  {profileSaving ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-2" />
-                      Save Changes
-                    </>
-                  )}
-                </Button>
-              </div>
+              <FormField
+                control={profileForm.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter your phone number" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <Button 
+                type="submit" 
+                disabled={profileSaving}
+                className="w-full md:w-auto"
+              >
+                {profileSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Save Changes
+              </Button>
             </form>
           </Form>
         </CardContent>
       </Card>
 
-      {/* Password Change */}
+      {/* Password Change Card */}
       <Card>
         <CardHeader>
           <CardTitle>Change Password</CardTitle>
@@ -493,39 +499,6 @@ export function ProfileSettings() {
         <CardContent>
           <Form {...passwordForm}>
             <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-4">
-              <FormField
-                control={passwordForm.control}
-                name="currentPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Current Password</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Input
-                          type={showCurrentPassword ? 'text' : 'password'}
-                          placeholder="Enter current password"
-                          {...field}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                        >
-                          {showCurrentPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               <FormField
                 control={passwordForm.control}
                 name="newPassword"
@@ -554,9 +527,6 @@ export function ProfileSettings() {
                         </Button>
                       </div>
                     </FormControl>
-                    <FormDescription>
-                      Password must be at least 8 characters long
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -595,72 +565,81 @@ export function ProfileSettings() {
                 )}
               />
 
-              <div className="flex justify-end">
-                <Button type="submit" disabled={passwordChanging}>
-                  {passwordChanging ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Updating...
-                    </>
-                  ) : (
-                    'Update Password'
-                  )}
-                </Button>
-              </div>
+              <Button 
+                type="submit" 
+                disabled={passwordChanging}
+                className="w-full md:w-auto"
+              >
+                {passwordChanging ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Update Password
+              </Button>
             </form>
           </Form>
         </CardContent>
       </Card>
 
-      {/* Account Deletion */}
+      {/* Danger Zone Card */}
       <Card className="border-destructive">
         <CardHeader>
-          <CardTitle className="text-destructive">Danger Zone</CardTitle>
+          <CardTitle className="text-destructive flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            Danger Zone
+          </CardTitle>
           <CardDescription>
             Permanently delete your account and all associated data.
           </CardDescription>
-        </CardHeader>        <CardContent>
+        </CardHeader>
+        <CardContent>
           <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
             <DialogTrigger asChild>
-              <Button variant="destructive" className="w-full sm:w-auto">
+              <Button variant="destructive" className="w-full md:w-auto">
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Account
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-destructive" />
-                  Delete Account
-                </DialogTitle>
-                <DialogDescription className="space-y-2">
-                  <p>This action cannot be undone. This will permanently delete your account and remove all your data from our servers.</p>
-                  <p>Type <strong>DELETE</strong> to confirm:</p>
+                <DialogTitle>Delete Account</DialogTitle>
+                <DialogDescription>
+                  This action cannot be undone. This will permanently delete your account
+                  and remove all your data from our servers.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Type "DELETE" to confirm:</Label>
                   <Input
                     value={deleteConfirmation}
                     onChange={(e) => setDeleteConfirmation(e.target.value)}
-                    placeholder="Type DELETE to confirm"
-                    className="mt-2"
+                    placeholder="DELETE"
                   />
-                </DialogDescription>
-              </DialogHeader>
+                </div>
+              </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDeleteDialog(false)
+                    setDeleteConfirmation('')
+                  }}
+                >
                   Cancel
                 </Button>
                 <Button
-                  onClick={handleDeleteAccount}
-                  disabled={deleteConfirmation !== 'DELETE' || deleting}
                   variant="destructive"
+                  onClick={handleDeleteAccount}
+                  disabled={deleting || deleteConfirmation !== 'DELETE'}
                 >
                   {deleting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Deleting...
-                    </>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   ) : (
-                    'Delete Account'
+                    <Trash2 className="h-4 w-4 mr-2" />
                   )}
+                  Delete Account
                 </Button>
               </DialogFooter>
             </DialogContent>

@@ -29,7 +29,6 @@ enum InterviewStatus {
 model Profile {
   id                      String   @id @db.Uuid
   full_name               String?
-  company_name            String?
   department              String?
   phone                   String?
   role                    UserRole @default(interviewer)
@@ -44,11 +43,41 @@ model Profile {
   created_at              DateTime @default(now())
   updated_at              DateTime @updatedAt
 
+  // Company relationship
+  companyId               String?  @map("company_id") @db.Uuid
+  company                 Company? @relation(fields: [companyId], references: [id])
+
   // Relations
   interview_templates     InterviewTemplate[]
   interview_sessions      InterviewSession[]
 
   @@map("profiles")
+}
+
+// Company information table
+model Company {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  email       String?
+  website     String?
+  industry    String?
+  companySize String?   @map("company_size")
+  phone       String?
+  address     String?
+  description String?
+  logoUrl     String?   @map("logo_url")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relation to user profiles
+  profiles    Profile[]
+  
+  // Integration relations
+  integration CompanyIntegration?
+  webhooks    Webhook[]
+  apiKeys     ApiKey[]
+
+  @@map("companies")
 }
 
 // Interview templates
@@ -132,4 +161,52 @@ model InterviewSession {
   interviewer      Profile           @relation(fields: [interviewer_id], references: [id], onDelete: Cascade)
 
   @@map("interview_sessions")
+}
+
+// Company integration settings
+model CompanyIntegration {
+  id           String  @id @default(cuid())
+  companyId    String  @unique @map("company_id") @db.Uuid
+  vapiApiKey   String? @map("vapi_api_key")
+  vapiAssistantId String? @map("vapi_assistant_id")
+  vapiVoiceProvider String? @map("vapi_voice_provider")
+  vapiVoiceId  String? @map("vapi_voice_id")
+  vapiLanguage String? @map("vapi_language")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("company_integrations")
+}
+
+// Webhook configurations
+model Webhook {
+  id        String   @id @default(cuid())
+  companyId String   @map("company_id") @db.Uuid
+  url       String
+  events    String[]
+  isActive  Boolean  @default(true) @map("is_active")
+  lastTriggeredAt DateTime? @map("last_triggered_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@map("webhooks")
+}
+
+// API Keys for company integrations
+model ApiKey {
+  id           String   @id @default(cuid())
+  companyId    String   @map("company_id") @db.Uuid
+  key          String   @unique // The hashed API key
+  prefix       String   @unique // A short, non-sensitive prefix for display
+  name         String
+  permissions  String[]
+  lastUsedAt   DateTime? @map("last_used_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@map("api_keys")
 }

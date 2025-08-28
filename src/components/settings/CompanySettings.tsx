@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { 
   Form,
   FormControl,
@@ -36,6 +37,7 @@ import {
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
+import { toast } from 'sonner'
 import { 
   Building2, 
   Globe, 
@@ -51,18 +53,36 @@ import {
   MoreHorizontal,
   Crown,
   Shield,
-  User
+  User,
+  Loader2,
+  AlertCircle,
+  X
 } from 'lucide-react'
 
+interface Company {
+  id: string
+  name: string
+  website?: string | null
+  industry?: string | null
+  companySize?: string | null
+  description?: string | null
+  address?: string | null
+  phone?: string | null
+  email?: string | null
+  logoUrl?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 const companyFormSchema = z.object({
-  companyName: z.string().min(2, 'Company name must be at least 2 characters'),
+  name: z.string().min(2, 'Company name must be at least 2 characters'),
   website: z.string().url('Invalid website URL').optional().or(z.literal('')),
   industry: z.string().min(1, 'Please select an industry'),
   companySize: z.string().min(1, 'Please select company size'),
   description: z.string().max(1000, 'Description must be less than 1000 characters').optional(),
   address: z.string().optional(),
   phone: z.string().optional(),
-  email: z.string().email('Invalid email address').optional(),
+  email: z.string().email('Invalid email address').optional().or(z.literal('')),
 })
 
 const inviteFormSchema = z.object({
@@ -116,84 +136,210 @@ const mockTeamMembers: TeamMember[] = [
 ]
 
 export function CompanySettings() {
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(mockTeamMembers)
-  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
+  const [company, setCompany] = useState<Company | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const companyForm = useForm<CompanyFormValues>({
     resolver: zodResolver(companyFormSchema),
     defaultValues: {
-      companyName: 'TechCorp Solutions',
-      website: 'https://techcorp.com',
-      industry: 'technology',
-      companySize: '51-200',
-      description: 'Leading technology solutions provider specializing in AI-powered interview platforms and HR automation tools.',
-      address: '123 Tech Street, San Francisco, CA 94105',
-      phone: '+1 (555) 123-4567',
-      email: 'info@techcorp.com',
-    },
-  })
-
-  const inviteForm = useForm<InviteFormValues>({
-    resolver: zodResolver(inviteFormSchema),
-    defaultValues: {
+      name: '',
+      website: '',
+      industry: '',
+      companySize: '',
+      description: '',
+      address: '',
+      phone: '',
       email: '',
-      role: '',
-      department: '',
     },
   })
 
-  const onCompanySubmit = (data: CompanyFormValues) => {
-    console.log('Company data:', data)
-    // TODO: Implement company update
+  // Load company data on mount
+  useEffect(() => {
+    loadCompanyData()
+  }, [])
+
+  const loadCompanyData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const response = await fetch('/api/company')
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to load company data')
+      }
+      
+      const data = await response.json()
+      
+      if (data.company) {
+        setCompany(data.company)
+        // Update form with company data
+        companyForm.reset({
+          name: data.company.name || '',
+          website: data.company.website || '',
+          industry: data.company.industry || '',
+          companySize: data.company.companySize || '',
+          description: data.company.description || '',
+          address: data.company.address || '',
+          phone: data.company.phone || '',
+          email: data.company.email || '',
+        })
+      }
+    } catch (err) {
+      console.error('Error loading company data:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load company data')
+      toast.error('Failed to load company data. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const onInviteSubmit = (data: InviteFormValues) => {
-    console.log('Invite data:', data)
-    // TODO: Implement team member invitation
-    setIsInviteDialogOpen(false)
-    inviteForm.reset()
+  const onCompanySubmit = async (data: CompanyFormValues) => {
+    try {
+      setSaving(true)
+      setError(null)
+
+      const response = await fetch('/api/company', {
+        method: company ? 'PATCH' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to save company data')
+      }
+
+      const result = await response.json()
+      setCompany(result.company)
+      
+      toast.success(company ? "Company information updated successfully." : "Company created successfully.")
+    } catch (err) {
+      console.error('Error saving company data:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save company data'
+      setError(errorMessage)
+      toast.error(errorMessage)
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (file) {
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error("Please select an image file.")
+      return
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File size must be less than 5MB.")
+      return
+    }
+
+    try {
+      setUploading(true)
+      setError(null)
+
+      const formData = new FormData()
+      formData.append('logo', file)
+
+      const response = await fetch('/api/company/logo', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to upload logo')
+      }
+
+      const result = await response.json()
+      
+      // Update company state with new logo URL
+      setCompany(prev => prev ? { ...prev, logoUrl: result.logoUrl } : null)
       setLogoFile(file)
-      // TODO: Implement logo upload
+      
+      toast.success("Company logo uploaded successfully.")
+    } catch (err) {
+      console.error('Error uploading logo:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to upload logo'
+      setError(errorMessage)
+      toast.error(errorMessage)
+    } finally {
+      setUploading(false)
     }
   }
 
-  const removeMember = (memberId: string) => {
-    setTeamMembers(prev => prev.filter(member => member.id !== memberId))
-    // TODO: Implement member removal
-  }
+  const handleLogoRemove = async () => {
+    if (!company?.logoUrl) return
 
-  const getRoleIcon = (role: string) => {
-    switch (role.toLowerCase()) {
-      case 'admin':
-        return <Crown className="h-4 w-4 text-yellow-500" />
-      case 'manager':
-        return <Shield className="h-4 w-4 text-blue-500" />
-      default:
-        return <User className="h-4 w-4 text-gray-500" />
+    try {
+      setUploading(true)
+      setError(null)
+
+      const response = await fetch('/api/company/logo', {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to remove logo')
+      }
+
+      // Update company state to remove logo
+      setCompany(prev => prev ? { ...prev, logoUrl: null } : null)
+      setLogoFile(null)
+      
+      toast.success("Company logo removed successfully.")
+    } catch (err) {
+      console.error('Error removing logo:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to remove logo'
+      setError(errorMessage)
+      toast.error(errorMessage)
+    } finally {
+      setUploading(false)
     }
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'active':
-        return <Badge variant="default">Active</Badge>
-      case 'pending':
-        return <Badge variant="secondary">Pending</Badge>
-      case 'inactive':
-        return <Badge variant="outline">Inactive</Badge>
-      default:
-        return <Badge variant="outline">{status}</Badge>
-    }
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Company Information</CardTitle>
+            <CardDescription>Loading company details...</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
+      {/* Error Alert */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       {/* Company Information */}
       <Card>
         <CardHeader>
@@ -207,7 +353,15 @@ export function CompanySettings() {
           <div className="flex items-center gap-6">
             <div className="relative">
               <div className="w-24 h-24 bg-muted rounded-lg flex items-center justify-center border-2 border-dashed border-muted-foreground/25">
-                {logoFile ? (
+                {uploading ? (
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                ) : company?.logoUrl ? (
+                  <img 
+                    src={company.logoUrl} 
+                    alt="Company logo" 
+                    className="w-full h-full object-cover rounded-lg"
+                  />
+                ) : logoFile ? (
                   <img 
                     src={URL.createObjectURL(logoFile)} 
                     alt="Company logo" 
@@ -224,21 +378,30 @@ export function CompanySettings() {
                 Upload your company logo. PNG, JPG or SVG. Max size 5MB.
               </p>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" asChild>
+                <Button variant="outline" size="sm" asChild disabled={uploading}>
                   <Label htmlFor="logo-upload" className="cursor-pointer">
                     <Upload className="h-4 w-4 mr-2" />
-                    Upload Logo
+                    {uploading ? 'Uploading...' : 'Upload Logo'}
                   </Label>
                 </Button>
-                <Button variant="ghost" size="sm">
-                  Remove
-                </Button>
+                {(company?.logoUrl || logoFile) && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleLogoRemove}
+                    disabled={uploading}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Remove
+                  </Button>
+                )}
                 <Input
                   id="logo-upload"
                   type="file"
                   accept="image/*"
                   className="hidden"
                   onChange={handleLogoUpload}
+                  disabled={uploading}
                 />
               </div>
             </div>
@@ -251,7 +414,7 @@ export function CompanySettings() {
             <form onSubmit={companyForm.handleSubmit(onCompanySubmit)} className="space-y-4">
               <FormField
                 control={companyForm.control}
-                name="companyName"
+                name="name"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Company Name</FormLabel>
@@ -305,7 +468,7 @@ export function CompanySettings() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Industry</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select industry" />
@@ -332,7 +495,7 @@ export function CompanySettings() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Company Size</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select company size" />
@@ -409,148 +572,22 @@ export function CompanySettings() {
               />
 
               <div className="flex justify-end">
-                <Button type="submit">
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Changes
+                <Button type="submit" disabled={saving}>
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Changes
+                    </>
+                  )}
                 </Button>
               </div>
             </form>
           </Form>
-        </CardContent>
-      </Card>
-
-      {/* Team Management */}
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle>Team Members</CardTitle>
-              <CardDescription>
-                Manage your team members and their permissions.
-              </CardDescription>
-            </div>
-            <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Invite Member
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Invite Team Member</DialogTitle>
-                  <DialogDescription>
-                    Send an invitation to a new team member.
-                  </DialogDescription>
-                </DialogHeader>
-                <Form {...inviteForm}>
-                  <form onSubmit={inviteForm.handleSubmit(onInviteSubmit)} className="space-y-4">
-                    <FormField
-                      control={inviteForm.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email Address</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Enter email address" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={inviteForm.control}
-                      name="role"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Role</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select role" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="admin">Admin</SelectItem>
-                              <SelectItem value="manager">Manager</SelectItem>
-                              <SelectItem value="user">User</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={inviteForm.control}
-                      name="department"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Department</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Enter department" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <div className="flex justify-end gap-2">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        onClick={() => setIsInviteDialogOpen(false)}
-                      >
-                        Cancel
-                      </Button>
-                      <Button type="submit">
-                        Send Invitation
-                      </Button>
-                    </div>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {teamMembers.map((member) => (
-              <div key={member.id} className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Avatar>
-                    <AvatarImage src={member.avatar} alt={member.name} />
-                    <AvatarFallback>
-                      {member.name.split(' ').map(n => n[0]).join('')}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-medium">{member.name}</h4>
-                      {getRoleIcon(member.role)}
-                    </div>
-                    <p className="text-sm text-muted-foreground">{member.email}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-muted-foreground">{member.department}</span>
-                      <span className="text-xs text-muted-foreground">•</span>
-                      <span className="text-xs text-muted-foreground">
-                        Joined {new Date(member.joinedAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {getStatusBadge(member.status)}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeMember(member.id)}
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
         </CardContent>
       </Card>
     </div>

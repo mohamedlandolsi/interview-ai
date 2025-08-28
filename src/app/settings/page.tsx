@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ProfileSettings } from '@/components/settings/ProfileSettings'
 import { CompanySettings } from '@/components/settings/CompanySettings'
@@ -16,9 +16,21 @@ import {
 } from 'lucide-react'
 import { DashboardLayout } from '@/components/Layout'
 import { DashboardRoute } from '@/components/auth/ProtectedRoute'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('profile')
+  const { profile } = useAuth()
+  
+  // Check if user is admin
+  const isAdmin = profile?.role === 'admin'
+
+  // Redirect non-admin users away from integrations tab
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'integrations') {
+      setActiveTab('profile')
+    }
+  }, [isAdmin, activeTab])
   return (
     <DashboardRoute>
       <DashboardLayout>
@@ -31,7 +43,7 @@ export default function SettingsPage() {
           </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-0">
+        <TabsList className={`grid w-full gap-2 sm:gap-0 ${isAdmin ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5' : 'grid-cols-2 sm:grid-cols-2 lg:grid-cols-4'}`}>
           <TabsTrigger value="profile" className="flex items-center gap-2 text-sm">
             <User className="h-4 w-4" />
             <span className="hidden sm:inline">Profile</span>
@@ -40,10 +52,12 @@ export default function SettingsPage() {
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">Company</span>
           </TabsTrigger>
-          <TabsTrigger value="integrations" className="flex items-center gap-2 text-sm">
-            <Plug className="h-4 w-4" />
-            <span className="hidden sm:inline">Integrations</span>
-          </TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="integrations" className="flex items-center gap-2 text-sm">
+              <Plug className="h-4 w-4" />
+              <span className="hidden sm:inline">Integrations</span>
+            </TabsTrigger>
+          )}
           <TabsTrigger value="notifications" className="flex items-center gap-2 text-sm">
             <Bell className="h-4 w-4" />
             <span className="hidden sm:inline">Notifications</span>
@@ -62,11 +76,14 @@ export default function SettingsPage() {
           <CompanySettings />
         </TabsContent>
 
-        <TabsContent value="integrations" className="space-y-4">
-          <IntegrationsSettings />
-        </TabsContent>
+        {isAdmin && (
+          <TabsContent value="integrations" className="space-y-4">
+            <IntegrationsSettings />
+          </TabsContent>
+        )}
 
-        <TabsContent value="notifications" className="space-y-4">          <NotificationsSettings />
+        <TabsContent value="notifications" className="space-y-4">
+          <NotificationsSettings />
         </TabsContent>
 
         <TabsContent value="billing" className="space-y-4">

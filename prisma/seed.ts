@@ -56,6 +56,23 @@ async function main() {
     }
   ]
 
+  // Create a sample company first
+  const sampleCompany = await prisma.company.upsert({
+    where: { id: '00000000-0000-0000-0000-000000000001' },
+    update: {},
+    create: {
+      id: '00000000-0000-0000-0000-000000000001',
+      name: 'Sample Tech Company',
+      email: 'info@sampletech.com',
+      website: 'https://sampletech.com',
+      industry: 'Technology',
+      companySize: '50-100',
+      phone: '+1-555-123-4567',
+      address: '123 Tech Street, San Francisco, CA 94105',
+      description: 'A leading technology company focused on innovative solutions.'
+    }
+  })
+
   // Create a sample profile (this would typically be created by Supabase auth trigger)
   const sampleProfileId = '00000000-0000-0000-0000-000000000001'
   
@@ -66,12 +83,12 @@ async function main() {
       create: {
         id: sampleProfileId,
         full_name: 'Sample HR Manager',
-        company_name: 'TechCorp Inc.',
         department: 'Human Resources',
         role: UserRole.hr_manager,
         timezone: 'America/New_York',
         onboarding_completed: true,
         email_verified: true,
+        companyId: sampleCompany.id,
         notification_preferences: {
           email: true,
           push: true,

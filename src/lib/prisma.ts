@@ -21,6 +21,7 @@ export async function disconnectPrisma() {
 // Export types for convenience
 export type {
   Profile,
+  Company,
   InterviewTemplate,
   InterviewSession,
   UserRole,

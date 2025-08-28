@@ -30,7 +30,12 @@ export async function GET(
           select: {
             id: true,
             full_name: true,
-            company_name: true
+            company: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
           }
         }
       }
@@ -60,7 +65,11 @@ export async function GET(
         candidateName: session.candidate_name,
         candidateEmail: session.candidate_email,
         template: session.template,
-        interviewer: session.interviewer,
+        interviewer: {
+          id: session.interviewer.id,
+          full_name: session.interviewer.full_name,
+          company_name: session.interviewer.company?.name || null
+        },
         needsCandidateInfo: !session.candidate_name || !session.candidate_email
       }
     })

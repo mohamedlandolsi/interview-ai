@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Avatar Upload Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Avatar Upload Debug Test</h1>
+        
+        <div class="test-section">
+            <h3>1. Storage Configuration Test</h3>
+            <button onclick="testStorage()">Test Storage Setup</button>
+            <div id="storageResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>2. Avatar Upload Test</h3>
+            <input type="file" id="avatarFile" accept="image/*">
+            <button onclick="testUpload()">Test Upload</button>
+            <div id="uploadResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>3. Profile Data Test</h3>
+            <button onclick="testProfile()">Test Profile API</button>
+            <div id="profileResult"></div>
+        </div>
+    </div>
+
+    <script>
+        async function testStorage() {
+            const result = document.getElementById('storageResult');
+            result.innerHTML = '<p>Testing storage configuration...</p>';
+            
+            try {
+                const response = await fetch('/api/debug/storage');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.innerHTML = `
+                        <div class="success">
+                            <h4>Storage Test Results:</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `
+                        <div class="error">
+                            <h4>Storage Test Failed:</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                result.innerHTML = `
+                    <div class="error">
+                        <h4>Storage Test Error:</h4>
+                        <pre>${error.message}</pre>
+                    </div>
+                `;
+            }
+        }
+
+        async function testUpload() {
+            const fileInput = document.getElementById('avatarFile');
+            const result = document.getElementById('uploadResult');
+            
+            if (!fileInput.files[0]) {
+                result.innerHTML = '<div class="error">Please select a file first</div>';
+                return;
+            }
+
+            result.innerHTML = '<p>Testing avatar upload...</p>';
+            
+            try {
+                const formData = new FormData();
+                formData.append('avatar', fileInput.files[0]);
+
+                const response = await fetch('/api/profile/avatar', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.innerHTML = `
+                        <div class="success">
+                            <h4>Upload Successful!</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                            ${data.avatar_url ? `<img src="${data.avatar_url}" style="max-width: 100px; max-height: 100px; margin-top: 10px;">` : ''}
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `
+                        <div class="error">
+                            <h4>Upload Failed:</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                result.innerHTML = `
+                    <div class="error">
+                        <h4>Upload Error:</h4>
+                        <pre>${error.message}</pre>
+                    </div>
+                `;
+            }
+        }
+
+        async function testProfile() {
+            const result = document.getElementById('profileResult');
+            result.innerHTML = '<p>Testing profile API...</p>';
+            
+            try {
+                const response = await fetch('/api/profile');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.innerHTML = `
+                        <div class="success">
+                            <h4>Profile Data:</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `
+                        <div class="error">
+                            <h4>Profile Test Failed:</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                result.innerHTML = `
+                    <div class="error">
+                        <h4>Profile Test Error:</h4>
+                        <pre>${error.message}</pre>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

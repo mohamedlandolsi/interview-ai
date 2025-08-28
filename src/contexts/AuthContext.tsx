@@ -75,10 +75,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setProfileLoading(true)
       
       // Use our Prisma-based API route to fetch profile
-      const response = await fetch('/api/profile', {
+      // Add cache busting to ensure fresh data
+      const response = await fetch(`/api/profile?t=${new Date().getTime()}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
         },
       })
 

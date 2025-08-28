@@ -40,7 +40,12 @@ export async function GET(
           select: {
             id: true,
             full_name: true,
-            company_name: true
+            company: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
           }
         }
       }

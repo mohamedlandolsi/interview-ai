@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { createUserProfile, profileExists, getUserProfile } from '@/lib/auth-database'
+import { prisma } from '@/lib/prisma'
 import type { UserRole } from '@prisma/client'
 
 export async function POST(request: NextRequest) {
@@ -30,7 +31,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       full_name,
-      company_name,
       role = 'interviewer'
     } = body
 
@@ -38,7 +38,6 @@ export async function POST(request: NextRequest) {
     const profile = await createUserProfile(user.id, {
       email: user.email,
       full_name,
-      company_name,
       avatar_url: user.user_metadata?.avatar_url,
       role: role as UserRole
     })
@@ -93,6 +92,66 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching profile:', error)
     return NextResponse.json(
       { error: 'Failed to fetch profile' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    
+    // Get the current user
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    // Parse the request body
+    const body = await request.json()
+    const updateData: any = {}
+
+    // Only include fields that are provided in the request
+    if (body.full_name !== undefined) updateData.full_name = body.full_name
+    if (body.company_name !== undefined) updateData.company_name = body.company_name
+    if (body.department !== undefined) updateData.department = body.department
+    if (body.phone !== undefined) updateData.phone = body.phone
+    if (body.timezone !== undefined) updateData.timezone = body.timezone
+    if (body.notification_preferences !== undefined) {
+      updateData.notification_preferences = body.notification_preferences
+    }
+
+    // Always update the timestamp
+    updateData.updated_at = new Date()
+
+    // Update the profile
+    const updatedProfile = await prisma.profile.update({
+      where: { id: user.id },
+      data: updateData
+    })
+
+    return NextResponse.json({
+      message: 'Profile updated successfully',
+      profile: updatedProfile
+    })
+
+  } catch (error) {
+    console.error('Error updating profile:', error)
+    
+    // Handle specific Prisma errors
+    if (error instanceof Error && error.message.includes('Record to update not found')) {
+      return NextResponse.json(
+        { error: 'Profile not found' },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json(
+      { error: 'Failed to update profile' },
       { status: 500 }
     )
   }

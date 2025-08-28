@@ -12,7 +12,6 @@ export async function createUserProfile(
     email?: string
     full_name?: string
     avatar_url?: string
-    company_name?: string
     role?: UserRole
   }
 ): Promise<Profile> {
@@ -21,7 +20,6 @@ export async function createUserProfile(
       data: {
         id: userId,
         full_name: userData.full_name || null,
-        company_name: userData.company_name || null,
         avatar_url: userData.avatar_url || null,
         role: userData.role || 'interviewer',
         email_verified: false,
