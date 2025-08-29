@@ -293,13 +293,21 @@ Extract comprehensive structured data that enables informed hiring decisions.`
 - Keep the candidate engaged and comfortable
 - Gather comprehensive information about their qualifications
 
+**IMPORTANT CONVERSATION FLOW:**
+1. You will start with a greeting asking if they're ready
+2. When they confirm they're ready (saying "yes", "ready", "let's start", etc.), immediately begin the interview with the first substantial question
+3. DO NOT end the call when they say they're ready - this means START the interview
+4. Continue asking questions until you have covered all important areas
+5. Only end when you have completed a thorough interview (15-30 minutes)
+
 **Interview Structure:**
-1. Start with a warm welcome and brief position overview
-2. Ask about their background and experience
-3. Cover key competency areas for the role
-4. Include behavioral and situational questions
-5. Allow time for candidate questions
-6. Close professionally with next steps
+1. Start with a warm welcome and brief position overview (DONE in firstMessage)
+2. When they confirm readiness, begin with background questions  
+3. Ask about their background and experience
+4. Cover key competency areas for the role
+5. Include behavioral and situational questions
+6. Allow time for candidate questions
+7. Close professionally with next steps
 
 **Key Questions to Cover:**
 ${questionsList}
@@ -314,6 +322,7 @@ ${templateInstructions}
 - Be encouraging and supportive
 - Take detailed notes mentally for analysis
 - Adapt questions based on candidate responses
+- NEVER end the call prematurely - conduct a full interview
 
 **Important:** This interview will be analyzed for:
 - Communication effectiveness
@@ -322,18 +331,28 @@ ${templateInstructions}
 - Professional experience
 - Overall candidate suitability
 
-Begin with a professional greeting and position introduction.`;
+Remember: When the candidate says they're ready, that's your cue to START the interview, not end it!`;
 
   return {
     name: `Interview Assistant for ${candidateName}`,
+    
+    // First message to start the conversation
+    firstMessage: `Hello ${candidateName}! Welcome to your interview for the ${position} position. I'm your AI interviewer today. 
+
+I'll be asking you some questions to learn more about your background and experience. This should take about 15-30 minutes. 
+
+Are you ready to begin?`,
+    
     voice: {
       provider: "11labs" as const,
-      voiceId: "sarah", // Professional, clear voice
+      // Use a known valid 11labs voice ID (Rachel). Names are not valid here.
+      voiceId: "pNInz6obpgDQGcFmaJgB",
       optimizeStreaming: true
     },
     model: {
       provider: "openai" as const,
-      model: "gpt-4" as const,
+      // Use a widely supported OpenAI model for realtime assistants
+      model: "gpt-4o-mini" as const,
       temperature: 0.1, // Low temperature for consistent, professional responses
       messages: [{
         role: "system" as const,
@@ -360,20 +379,25 @@ Begin with a professional greeting and position introduction.`;
       structuredDataSchema: analysisConfig.structuredData.schema,
       structuredDataRequestTimeoutSeconds: 10,
       
-      // Minimum messages to trigger analysis (as shown in screenshot)
-      minMessagesToTriggerAnalysis: 2
+  // Minimum messages to trigger analysis
+  // Increase threshold so greeting/ready exchange doesn't trigger wrap-up
+  minMessagesToTriggerAnalysis: 6
     },
     
-    // End call settings
+    // End call settings - prevent premature endings
     endCallMessage: "Thank you for your time today. We'll be in touch with next steps soon. Have a great day!",
+  endCallPhrases: ["goodbye", "end interview", "that concludes our interview", "thank you for your time"],
+  // Disable function-based endings to avoid premature hangups
+  endCallFunctionEnabled: false as const,
+    
+    // Timeouts - be generous to prevent accidental endings
     maxDurationSeconds: 3600, // 1 hour max
+  silenceTimeoutSeconds: 60, // Generous timeout to avoid accidental hangups
+    responseDelaySeconds: 1.0, // Slight delay for more natural conversation
     
     // Background sound suppression
     backgroundSound: "office" as const,
     backgroundDenoisingEnabled: true,
-    
-    // Real-time features
-    responseDelaySeconds: 0.8,
     llmRequestNonStreamingTimeoutSeconds: 60,
   };
 };

@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import Vapi from '@vapi-ai/web';
 import { createInterviewAssistantConfig, generateQuestionsForRole } from '@/lib/vapi-assistant-config';
+import { errorLogger } from '@/lib/error-logger';
 
 // Configuration validation function
 function validateAssistantConfig(config: any): { isValid: boolean; errors: string[] } {
@@ -45,6 +46,7 @@ export interface UseVapiReturn {
   callState: CallState;
   startCall: (assistantId?: string) => Promise<void>;
   startInterviewCall: (candidateName: string, position: string, templateQuestions?: string[], templateInstruction?: string) => Promise<void>;
+  startTransientInterviewCall: (sessionId: string, candidateName: string, position: string) => Promise<void>;
   endCall: () => void;
   toggleMute: () => void;
   isMuted: boolean;
@@ -68,11 +70,14 @@ export const useVapi = (): UseVapiReturn => {
   useEffect(() => {
     const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
     
-    console.log('🔧 Vapi initialization - publicKey exists:', !!publicKey);
-    console.log('🔧 Vapi initialization - publicKey length:', publicKey?.length || 0);
+    errorLogger.info('Vapi', 'Initializing Vapi instance', {
+      publicKeyExists: !!publicKey,
+      publicKeyLength: publicKey?.length || 0
+    });
     
     if (!publicKey) {
-      console.error('VAPI public key is not configured');
+      const errorMsg = 'VAPI public key is not configured';
+      errorLogger.error('Vapi', errorMsg);
       setCallState(prev => ({
         ...prev,
         status: 'error',
@@ -113,7 +118,14 @@ export const useVapi = (): UseVapiReturn => {
       });
 
       vapiRef.current.on('call-end', () => {
-        console.log('Call ended');
+        console.log('📞 Call ended - timestamp:', new Date().toISOString());
+        console.log('📞 Call duration:', callState.duration, 'seconds');
+        
+        errorLogger.info('Vapi', 'Call ended', {
+          duration: callState.duration,
+          timestamp: new Date().toISOString()
+        });
+        
         setCallState(prev => ({
           ...prev,
           status: 'disconnected',
@@ -126,7 +138,7 @@ export const useVapi = (): UseVapiReturn => {
           intervalRef.current = null;
         }
       });      vapiRef.current.on('error', (error: any) => {
-        console.error('Vapi error details:', {
+        errorLogger.error('Vapi', 'Vapi error occurred', {
           error,
           errorType: typeof error,
           errorMessage: error?.message,
@@ -135,13 +147,33 @@ export const useVapi = (): UseVapiReturn => {
           errorString: String(error),
           errorKeys: error ? Object.keys(error) : [],
           fullError: JSON.stringify(error, null, 2)
-        });
+        }, error instanceof Error ? error : new Error(String(error)));
         
         // Extract meaningful error message
         let errorMessage = 'An error occurred during the call';
+        
+        // Handle specific error types
         if (error) {
-          if (typeof error === 'string') {
+          const errorStr = String(error).toLowerCase();
+          
+          // Check for ejection-specific errors (both string and object format)
+          const isEjected = errorStr.includes('meeting ended due to ejection') || 
+                           errorStr.includes('ejected') ||
+                           (error.type === 'ejected') ||
+                           (error.msg && String(error.msg).toLowerCase().includes('meeting has ended'));
+          
+          if (isEjected) {
+            errorMessage = 'The interview session was ended unexpectedly. This may be due to a configuration issue or API key problem. Please check your Vapi settings.';
+          } else if (errorStr.includes('authentication') || errorStr.includes('unauthorized')) {
+            errorMessage = 'Authentication failed. Please check your Vapi API keys in the settings.';
+          } else if (errorStr.includes('quota') || errorStr.includes('limit')) {
+            errorMessage = 'API quota exceeded. Please check your Vapi account limits.';
+          } else if (errorStr.includes('network') || errorStr.includes('connection')) {
+            errorMessage = 'Network connection issue. Please check your internet connection and try again.';
+          } else if (typeof error === 'string') {
             errorMessage = error;
+          } else if (error.msg) {
+            errorMessage = String(error.msg);
           } else if (error.message) {
             errorMessage = error.message;
           } else if (error.error) {
@@ -179,11 +211,32 @@ export const useVapi = (): UseVapiReturn => {
       });
 
       vapiRef.current.on('message', (message: any) => {
-        console.log('📨 Message received:', message);
+        const msgType = message?.type
+        const role = message?.role
+        const content = typeof message?.content === 'string' ? message.content : ''
+
+        // Ignore non-conversational updates
+        if (msgType === 'status-update' || msgType === 'conversation-update' || msgType === 'transcript') {
+          console.log('🛈 Non-conversational message:', { type: msgType })
+          return
+        }
+
+        console.log('📨 Message received:', {
+          type: msgType,
+          role,
+          content: content.substring(0, 120) + (content.length > 120 ? '…' : ''),
+          timestamp: new Date().toISOString()
+        })
+
+        // Log if this might be a readiness confirmation
+        const lc = content.toLowerCase()
+        if (lc.includes('ready') || (/^yes\b/.test(lc) && lc.length < 20)) {
+          console.log('� Readiness intent detected; ensuring interview continues.')
+        }
       });
 
-    } catch (error) {
-      console.error('Failed to initialize Vapi:', error);
+    } catch (error: any) {
+      errorLogger.error('Vapi', 'Failed to initialize Vapi', { error }, error);
       setCallState(prev => ({
         ...prev,
         status: 'error',
@@ -250,6 +303,18 @@ export const useVapi = (): UseVapiReturn => {
         ...prev,
         status: 'error',
         error: 'Voice assistant not initialized'
+      }));
+      return;
+    }
+
+    // Check if Vapi API key is configured
+    const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
+    if (!publicKey || publicKey.length < 10) {
+      console.error('Vapi API key not configured or invalid');
+      setCallState(prev => ({
+        ...prev,
+        status: 'error',
+        error: 'Vapi API key is not configured. Please set up your Vapi integration in Settings.'
       }));
       return;
     }
@@ -361,7 +426,8 @@ Begin the interview now with a greeting.`;
           },
           model: {
             provider: "openai" as const,
-            model: "gpt-4" as const,
+            // Use a realtime-capable, widely supported model
+            model: "gpt-4o-mini" as const,
             temperature: 0.1,
             messages: [{
               role: "system" as const,
@@ -369,8 +435,15 @@ Begin the interview now with a greeting.`;
             }]
           },
           firstMessage: `Hello! I'm your AI interviewer today. I'm excited to learn more about your background and experience for the ${position} position. Let's begin - could you please introduce yourself and tell me what interests you most about this role?`,
-          responseDelaySeconds: 0.4,
-          backgroundDenoisingEnabled: true
+          // Add additional fields that might be required
+          endCallMessage: "Thank you for your time today. The interview has been completed successfully.",
+          endCallPhrases: ["goodbye", "end interview", "finish interview", "conclude interview"],
+          maxDurationSeconds: 3600, // 1 hour max
+          silenceTimeoutSeconds: 45, // Increased to prevent premature timeout
+          responseDelaySeconds: 1.0, // Natural conversation pace
+          backgroundDenoisingEnabled: true,
+          // Prevent accidental call endings
+          endCallFunctionEnabled: false, // Disable function-based ending to prevent accidental triggers
         };
 
         console.log('🔧 Using dynamic assistant config with template data');
@@ -449,7 +522,7 @@ Begin the interview now with a greeting.`;
         },
         model: {
           provider: "openai" as const,
-          model: "gpt-4" as const,
+          model: "gpt-4o-mini" as const,
           temperature: 0.1,
           messages: [{
             role: "system" as const,
@@ -457,9 +530,18 @@ Begin the interview now with a greeting.`;
           }]
         },
         firstMessage: `Hello! I'm your AI interviewer today. I'm excited to learn more about your background and experience for the ${position} position. Let's begin - could you please introduce yourself and tell me what interests you most about this role?`,
-        responseDelaySeconds: 0.4,
-        backgroundDenoisingEnabled: true
-      };console.log('🔄 Using fallback assistant config:', assistantConfig.name);
+        // Robust call management settings
+        endCallMessage: "Thank you for your time today. The interview has been completed successfully.",
+        endCallPhrases: ["goodbye", "end interview", "finish interview", "conclude interview"],
+        maxDurationSeconds: 3600, // 1 hour max
+        silenceTimeoutSeconds: 45, // Increased to prevent premature timeout
+        responseDelaySeconds: 1.0, // Natural conversation pace
+        backgroundDenoisingEnabled: true,
+        // Prevent accidental call endings
+        endCallFunctionEnabled: false, // Disable function-based ending to prevent accidental triggers
+      };
+
+      console.log('🔄 Using fallback assistant config:', assistantConfig.name);
       console.log('🔧 Final config being sent to Vapi:', JSON.stringify(assistantConfig, null, 2));
       
       // Validate configuration before sending to Vapi
@@ -529,10 +611,110 @@ Begin the interview now with a greeting.`;
       // This is a placeholder for volume control
     }
   }, [callState.isActive]);
+
+  // Start an interview call with a transient assistant for an existing session
+  const startTransientInterviewCall = useCallback(async (sessionId: string, candidateName: string, position: string) => {
+    if (!vapiRef.current) {
+      console.error('Vapi not initialized');
+      setCallState(prev => ({
+        ...prev,
+        status: 'error',
+        error: 'Voice assistant not initialized'
+      }));
+      return;
+    }
+
+    // Validate inputs
+    if (!sessionId?.trim()) {
+      console.error('Session ID is required');
+      setCallState(prev => ({
+        ...prev,
+        status: 'error',
+        error: 'Session ID is required'
+      }));
+      return;
+    }
+
+    if (!candidateName?.trim()) {
+      console.error('Candidate name is required');
+      setCallState(prev => ({
+        ...prev,
+        status: 'error',
+        error: 'Candidate name is required'
+      }));
+      return;
+    }
+
+    if (!position?.trim()) {
+      console.error('Position is required');
+      setCallState(prev => ({
+        ...prev,
+        status: 'error',
+        error: 'Position is required'
+      }));
+      return;
+    }
+
+    try {
+      setCallState(prev => ({
+        ...prev,
+        status: 'connecting',
+        error: undefined
+      }));
+
+      console.log('🚀 Starting transient assistant interview for session:', sessionId);
+
+      // Create transient assistant via API
+      const startResponse = await fetch('/api/interviews/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          interviewSessionId: sessionId,
+          candidateName,
+          position
+        })
+      });
+
+      if (!startResponse.ok) {
+        const errorData = await startResponse.json().catch(() => ({ error: 'Failed to parse error response' }));
+        throw new Error(errorData.error || 'Failed to start interview');
+      }
+
+      const startData = await startResponse.json();
+      console.log('✅ Transient assistant created:', startData.assistantId);
+
+      // Store session ID for webhook correlation
+      sessionIdRef.current = sessionId;
+
+      // Start the call with the transient assistant
+      await vapiRef.current.start(startData.assistantId);
+      
+      console.log('📞 Call started with transient assistant');
+
+    } catch (error: any) {
+      console.error('Error starting interview call:', error);
+      errorLogger.error('Vapi', 'Failed to start interview call', {
+        sessionId,
+        candidateName,
+        position,
+        error: error.message
+      }, error);
+      
+      setCallState(prev => ({
+        ...prev,
+        status: 'error',
+        error: error.message || 'Failed to start interview call'
+      }));
+    }
+  }, []);
+
   return {
     callState,
     startCall,
     startInterviewCall,
+    startTransientInterviewCall,
     endCall,
     toggleMute,
     isMuted,

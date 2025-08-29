@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useVapi } from '@/hooks/useVapi';
 import { useTemplates } from '@/hooks/useTemplates';
+import { errorLogger } from '@/lib/error-logger';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 
 interface InterviewComponentProps {
+  sessionId?: string; // New prop for transient assistant mode
   templateId?: string;
   assistantId?: string;
   candidateName?: string;
@@ -32,6 +34,7 @@ interface InterviewComponentProps {
 }
 
 export const InterviewComponent: React.FC<InterviewComponentProps> = ({
+  sessionId,
   templateId,
   assistantId,
   candidateName,
@@ -46,6 +49,7 @@ export const InterviewComponent: React.FC<InterviewComponentProps> = ({
     callState, 
     startCall, 
     startInterviewCall,
+    startTransientInterviewCall,
     endCall, 
     toggleMute, 
     isMuted, 
@@ -112,8 +116,9 @@ export const InterviewComponent: React.FC<InterviewComponentProps> = ({
           onError?.(`Template ${templateId} not found`);
         }
       } catch (error) {
-        console.error('Error fetching template:', error);
-        onError?.(`Failed to load template: ${error}`);
+        const errorMessage = `Error fetching template: ${error}`;
+        errorLogger.error('InterviewComponent', errorMessage, { error, templateId }, error instanceof Error ? error : new Error(String(error)));
+        onError?.(errorMessage);
       } finally {
         setLoadingTemplate(false);
       }
@@ -134,6 +139,10 @@ export const InterviewComponent: React.FC<InterviewComponentProps> = ({
         break;
       case 'error':
         if (callState.error) {
+          errorLogger.error('InterviewComponent', 'Call state error', { 
+            error: callState.error,
+            callState: callState 
+          });
           onError?.(callState.error);
         }
         break;
@@ -141,18 +150,60 @@ export const InterviewComponent: React.FC<InterviewComponentProps> = ({
   }, [callState.status, callState.duration, callState.error, onInterviewStart, onInterviewEnd, onError]);
 
   const handleStartInterview = async () => {
+    // Determine which questions to use (template questions take priority)
+    const questionsToUse = templateQuestions || extractedQuestions;
+    
     try {
-      // Determine which questions to use (template questions take priority)
-      const questionsToUse = templateQuestions || extractedQuestions;
+      // Validate inputs first
+      if (!candidateName?.trim() || !position?.trim()) {
+        const errorMessage = 'Candidate name and position are required';
+        errorLogger.error('InterviewComponent', errorMessage, { candidateName, position });
+        onError?.(errorMessage);
+        return;
+      }
+
+      errorLogger.info('InterviewComponent', 'Starting interview', {
+        sessionId,
+        useEnhancedAnalysis,
+        candidateName,
+        position,
+        questionsToUse: questionsToUse?.length || 0,
+        templateInstruction: !!templateInstruction,
+        assistantId
+      });
       
-      // Use enhanced analysis if candidate name and position are provided
-      if (useEnhancedAnalysis && candidateName && position) {
+      // If sessionId is provided, use transient assistant approach
+      if (sessionId) {
+        console.log('🚀 Starting interview with transient assistant for session:', sessionId);
+        await startTransientInterviewCall(sessionId, candidateName, position);
+      }
+      // Use enhanced analysis if candidate name and position are provided (legacy mode)
+      else if (useEnhancedAnalysis && candidateName && position) {
         await startInterviewCall(candidateName, position, questionsToUse, templateInstruction);
-      } else {
+      } 
+      // Fall back to static assistant (legacy mode)
+      else {
+        if (!assistantId && !process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID) {
+          const errorMessage = 'No assistant configuration found. Please check your settings.';
+          errorLogger.error('InterviewComponent', errorMessage);
+          onError?.(errorMessage);
+          return;
+        }
         await startCall(assistantId);
       }
     } catch (error) {
-      console.error('Failed to start interview:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to start interview';
+      errorLogger.error('InterviewComponent', 'Failed to start interview', { 
+        error,
+        sessionId,
+        useEnhancedAnalysis,
+        candidateName,
+        position,
+        questionsToUse: questionsToUse?.length || 0,
+        templateInstruction: !!templateInstruction,
+        assistantId 
+      }, error instanceof Error ? error : new Error(String(error)));
+      onError?.(errorMessage);
     }
   };
 
@@ -214,7 +265,11 @@ export const InterviewComponent: React.FC<InterviewComponentProps> = ({
         {callState.error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{callState.error}</AlertDescription>
+            <AlertDescription>
+              {typeof callState.error === 'string' 
+                ? callState.error 
+                : (callState.error as any)?.message || (callState.error as any)?.msg || 'An error occurred during the interview'}
+            </AlertDescription>
           </Alert>
         )}
 

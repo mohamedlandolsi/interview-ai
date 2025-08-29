@@ -8,7 +8,13 @@ global.TextDecoder = TextDecoder
 // Mock Request and Response
 global.Request = class Request {
   constructor(input, init = {}) {
-    this.url = typeof input === 'string' ? input : input.url
+    // Create URL property as non-writable to match NextRequest behavior
+    Object.defineProperty(this, 'url', {
+      value: typeof input === 'string' ? input : input.url,
+      enumerable: true,
+      configurable: false,
+      writable: false
+    })
     this.method = init.method || 'GET'
     this.headers = new Map(Object.entries(init.headers || {}))
     this.body = init.body
@@ -21,6 +27,10 @@ global.Response = class Response {
     this.status = init.status || 200
     this.statusText = init.statusText || 'OK'
     this.headers = new Map(Object.entries(init.headers || {}))
+  }
+  
+  async json() {
+    return JSON.parse(this.body)
   }
   
   static json(data, init) {

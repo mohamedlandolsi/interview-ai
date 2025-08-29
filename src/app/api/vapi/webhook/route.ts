@@ -375,28 +375,44 @@ const handleFunctionCall = async (event: VapiWebhookEvent) => {
   // }
 }
 
-// Webhook signature verification (recommended for production)
+// Webhook signature verification (strict in production, relaxed in development)
 const verifyWebhookSignature = (payload: string, signature: string): boolean => {
   const webhookSecret = process.env.VAPI_WEBHOOK_SECRET
-  
-  // Skip verification in development if secret is not set
+  const isProd = process.env.NODE_ENV === 'production'
+
+  // If no secret configured, allow (primarily for local/dev environments)
   if (!webhookSecret) {
     console.warn('VAPI_WEBHOOK_SECRET not set - skipping signature verification')
     return true
   }
-  
+
+  // If the header is missing, be permissive in dev but strict in prod
+  if (!signature) {
+    if (!isProd) {
+      console.warn('x-vapi-signature header missing - allowing request in development')
+      return true
+    }
+    return false
+  }
+
   try {
     const expectedSignature = createHmac('sha256', webhookSecret)
       .update(payload, 'utf8')
       .digest('hex')
-    
+
     // Remove 'sha256=' prefix if present
     const cleanSignature = signature.replace('sha256=', '')
-    
-    return expectedSignature === cleanSignature
+
+    const match = expectedSignature === cleanSignature
+    if (!match && !isProd) {
+      console.warn('Invalid webhook signature (dev) - allowing for local testing')
+      return true
+    }
+    return match
   } catch (error) {
     console.error('Error verifying webhook signature:', error)
-    return false
+    // Be permissive in dev to avoid breaking sessions during local testing
+    return !isProd
   }
 }
 
