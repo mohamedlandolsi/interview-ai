@@ -375,6 +375,53 @@ const handleFunctionCall = async (event: VapiWebhookEvent) => {
   // }
 }
 
+const handleEndOfCallReport = async (event: VapiWebhookEvent) => {
+  console.log('🔍 End-of-call report received:', event.call?.id)
+  
+  try {
+    if (!event.call?.id) {
+      console.error('❌ No call ID in end-of-call report')
+      return
+    }
+
+    // Find the session by call ID
+    const session = await prisma.interviewSession.findFirst({
+      where: { vapi_call_id: event.call.id }
+    })
+
+    if (!session) {
+      console.error('❌ No session found for call ID:', event.call.id)
+      return
+    }
+
+    // Use the new InterviewAnalysisService method to process webhook data
+    const success = await InterviewAnalysisService.saveAnalysisFromWebhook(session.id, event)
+    
+    if (success) {
+      console.log('✅ End-of-call analysis saved successfully for session:', session.id)
+    } else {
+      console.error('❌ Failed to save end-of-call analysis for session:', session.id)
+      
+      // Fallback to our own analysis if Vapi analysis fails
+      console.log('🔄 Falling back to internal analysis generation...')
+      InterviewAnalysisService.generateAndSaveAnalysis(session.id)
+        .then((fallbackSuccess) => {
+          if (fallbackSuccess) {
+            console.log('✅ Fallback analysis completed for session:', session.id)
+          } else {
+            console.error('❌ Fallback analysis also failed for session:', session.id)
+          }
+        })
+        .catch((error) => {
+          console.error('❌ Fallback analysis error:', error)
+        })
+    }
+    
+  } catch (error) {
+    console.error('❌ Error handling end-of-call report:', error)
+  }
+}
+
 // Webhook signature verification (strict in production, relaxed in development)
 const verifyWebhookSignature = (payload: string, signature: string): boolean => {
   const webhookSecret = process.env.VAPI_WEBHOOK_SECRET
@@ -482,6 +529,10 @@ export async function POST(request: NextRequest) {
         
       case 'hang':
         console.log('Call was hung up')
+        break
+        
+      case 'end-of-call-report':
+        await handleEndOfCallReport(event)
         break
         
       default:

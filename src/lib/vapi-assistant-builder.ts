@@ -4,6 +4,7 @@
  */
 
 import { InterviewTemplate, CompanyIntegration } from '@prisma/client';
+import { createInterviewAssistantConfig } from './vapi-assistant-config';
 
 export interface VapiAssistantConfig {
   name: string;
@@ -40,19 +41,12 @@ export interface VapiAssistantConfig {
   backgroundDenoisingEnabled: boolean;
   serverUrl?: string;
   serverUrlSecret?: string;
+  // PRODUCTION-READY: Vapi Analysis Configuration (new format)
+  summaryPrompt?: string;
+  successEvaluationPrompt?: string;
+  structuredDataPrompt?: string;
+  structuredDataSchema?: any;
   llmRequestNonStreamingTimeoutSeconds?: number;
-  // Note: analysisSchema is not currently supported by Vapi API
-  // analysisSchema?: {
-  //   type: string;
-  //   summaryPrompt: string;
-  //   summaryRequestTimeoutSeconds: number;
-  //   successEvaluationPrompt: string;
-  //   successEvaluationRequestTimeoutSeconds: number;
-  //   structuredDataPrompt: string;
-  //   structuredDataSchema: any;
-  //   structuredDataRequestTimeoutSeconds: number;
-  //   minMessagesToTriggerAnalysis: number;
-  // };
 }
 
 interface BuildAssistantOptions {
@@ -93,6 +87,9 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
   // Configure model settings
   const modelConfig = buildModelConfig(systemPrompt);
 
+  // PRODUCTION-READY: Get comprehensive Vapi analysis configuration
+  const vapiAnalysisConfig = getVapiAnalysisConfig(candidateName, position, questions);
+
   // For development, use the production webhook URL since Vapi needs to reach it
   // In production, this will be the real webhook URL
   let webhookUrl: string;
@@ -122,9 +119,13 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
     responseDelaySeconds: 1.0,
     backgroundDenoisingEnabled: true,
     serverUrl: webhookUrl,
-    serverUrlSecret: process.env.VAPI_WEBHOOK_SECRET
-    // Note: llmRequestNonStreamingTimeoutSeconds and analysisSchema are not supported by Vapi API
-    // analysisSchema: buildAnalysisSchema(position, candidateName)
+    serverUrlSecret: process.env.VAPI_WEBHOOK_SECRET,
+    // PRODUCTION-READY: Enable Vapi's post-call analysis features
+    summaryPrompt: vapiAnalysisConfig.summaryPrompt,
+    successEvaluationPrompt: vapiAnalysisConfig.successEvaluationPrompt,
+    structuredDataPrompt: vapiAnalysisConfig.structuredDataPrompt,
+    structuredDataSchema: vapiAnalysisConfig.structuredDataSchema,
+    llmRequestNonStreamingTimeoutSeconds: 60
   };
 
   // PRODUCTION-READY: Final validation before returning config
@@ -136,6 +137,23 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
 
   console.log('✅ Assistant configuration validated successfully');
   return config;
+}
+
+/**
+ * Extract Vapi analysis configuration from the comprehensive config
+ * PRODUCTION-READY: Enables post-call analysis features
+ */
+function getVapiAnalysisConfig(candidateName: string, position: string, questions: string[]) {
+  // Get the comprehensive configuration from vapi-assistant-config.ts
+  const fullConfig = createInterviewAssistantConfig(candidateName, position, questions);
+  
+  // Extract just the analysis configuration parts for the new Vapi format
+  return {
+    summaryPrompt: fullConfig.analysisSchema?.summaryPrompt || '',
+    successEvaluationPrompt: fullConfig.analysisSchema?.successEvaluationPrompt || '',
+    structuredDataPrompt: fullConfig.analysisSchema?.structuredDataPrompt || '',
+    structuredDataSchema: fullConfig.analysisSchema?.structuredDataSchema || {}
+  };
 }
 
 /**

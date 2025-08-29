@@ -18,13 +18,23 @@ import {
   SelectValue 
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { 
   GripVertical, 
   Trash2, 
   Plus, 
   Minus, 
   Star,
-  Clock
+  Clock,
+  AlertTriangle
 } from "lucide-react"
 
 type Question = {
@@ -51,6 +61,7 @@ interface SortableItemProps {
 export function SortableItem({ id, question, index, onUpdate, onRemove }: SortableItemProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   
   const {
     attributes,
@@ -115,9 +126,8 @@ export function SortableItem({ id, question, index, onUpdate, onRemove }: Sortab
     }
   }
   const handleDelete = () => {
-    if (window.confirm(`Are you sure you want to delete this question? This action cannot be undone.`)) {
-      onRemove(id)
-    }
+    onRemove(id)
+    setShowDeleteDialog(false)
   }
 
   return (
@@ -152,15 +162,48 @@ export function SortableItem({ id, question, index, onUpdate, onRemove }: Sortab
                 onClick={() => setIsExpanded(!isExpanded)}
               >
                 {isExpanded ? "Collapse" : "Expand"}
-              </Button>              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDelete}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                title="Delete question"
-              >
-                <Trash2 className="w-4 h-4" />
               </Button>
+              <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    title="Delete question"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-red-500" />
+                      Delete Question
+                    </DialogTitle>
+                    <DialogDescription>
+                      Are you sure you want to delete this question? This action cannot be undone.
+                      <br />
+                      <span className="font-medium text-foreground mt-2 block">
+                        &ldquo;{question.title || "Untitled Question"}&rdquo;
+                      </span>
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowDeleteDialog(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={handleDelete}
+                    >
+                      Delete Question
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
           

@@ -30,6 +30,166 @@ export class InterviewAnalysisService {
   private static genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 
   /**
+   * PRODUCTION-READY: Save analysis results directly from Vapi webhook
+   * This is the primary method for processing Vapi's post-call analysis
+   */
+  static async saveAnalysisFromWebhook(sessionId: string, webhookData: any): Promise<boolean> {
+    console.log('🔍 Processing Vapi analysis from webhook for session:', sessionId)
+
+    try {
+      // Extract analysis data from webhook payload
+      const analysisData = this.extractAnalysisFromWebhook(webhookData)
+      if (!analysisData) {
+        console.error('❌ No valid analysis data found in webhook payload')
+        return false
+      }
+
+      // Map analysis data to our Prisma schema
+      const mappedData = this.mapAnalysisToSchema(analysisData, webhookData)
+
+      // Save to database
+      const updateResult = await prisma.interviewSession.update({
+        where: { id: sessionId },
+        data: {
+          ...mappedData,
+          status: 'completed',
+          completed_at: new Date()
+        }
+      })
+
+      console.log('✅ Vapi analysis results saved successfully for session:', sessionId)
+      console.log(`   - Overall Score: ${mappedData.analysis_score}`)
+      console.log(`   - Hiring Recommendation: ${mappedData.hiring_recommendation}`)
+      return true
+
+    } catch (error) {
+      console.error('❌ Error saving analysis from webhook:', error)
+      return false
+    }
+  }
+
+  /**
+   * Extract analysis data from Vapi webhook payload
+   */
+  private static extractAnalysisFromWebhook(webhookData: any): any | null {
+    try {
+      // Vapi sends analysis in the 'message' field for end-of-call-report events
+      if (webhookData.message?.analysis) {
+        return webhookData.message.analysis
+      }
+
+      // Sometimes analysis is in 'artifact' field
+      if (webhookData.artifact) {
+        return {
+          summary: webhookData.artifact.summary,
+          successEvaluation: webhookData.artifact.evaluation,
+          structuredData: webhookData.artifact.data
+        }
+      }
+
+      return null
+    } catch (error) {
+      console.error('Error extracting analysis from webhook:', error)
+      return null
+    }
+  }
+
+  /**
+   * Map Vapi analysis data to our Prisma schema fields
+   */
+  private static mapAnalysisToSchema(analysisData: any, webhookData: any): any {
+    const mappedData: any = {}
+
+    try {
+      // Extract transcript and recording
+      if (webhookData.message?.transcript) {
+        mappedData.final_transcript = webhookData.message.transcript
+      }
+      if (webhookData.message?.recordingUrl) {
+        mappedData.recording_url = webhookData.message.recordingUrl
+      }
+
+      // Process structured data (this is the main analysis result)
+      if (analysisData.structuredData) {
+        const structured = analysisData.structuredData
+
+        // Overall score (0-100)
+        if (structured.overallScore !== undefined) {
+          mappedData.analysis_score = structured.overallScore
+        }
+
+        // Category scores
+        if (structured.categoryScores) {
+          mappedData.category_scores = structured.categoryScores
+        }
+
+        // Strengths and areas for improvement
+        if (structured.strengths && Array.isArray(structured.strengths)) {
+          mappedData.strengths = structured.strengths
+        }
+        if (structured.areasForImprovement && Array.isArray(structured.areasForImprovement)) {
+          mappedData.areas_for_improvement = structured.areasForImprovement
+        }
+
+        // Hiring recommendation
+        if (structured.hiringRecommendation) {
+          mappedData.hiring_recommendation = structured.hiringRecommendation
+        }
+
+        // Detailed reasoning/feedback
+        if (structured.reasoning) {
+          mappedData.analysis_feedback = structured.reasoning
+        }
+
+        // Key insights
+        if (structured.keyInsights && Array.isArray(structured.keyInsights)) {
+          mappedData.key_insights = structured.keyInsights
+        }
+
+        // Question responses (individual question analysis)
+        if (structured.questionResponses && Array.isArray(structured.questionResponses)) {
+          mappedData.question_scores = structured.questionResponses
+        }
+
+        // Interview metrics
+        if (structured.interviewMetrics) {
+          mappedData.interview_metrics = structured.interviewMetrics
+        }
+      }
+
+      // Process summary (Q&A analysis)
+      if (analysisData.summary) {
+        mappedData.conversation_summary = typeof analysisData.summary === 'string' 
+          ? analysisData.summary 
+          : JSON.stringify(analysisData.summary)
+        mappedData.vapi_summary = analysisData.summary
+      }
+
+      // Process success evaluation
+      if (analysisData.successEvaluation) {
+        mappedData.vapi_success_evaluation = analysisData.successEvaluation
+        
+        // Extract score if available
+        if (analysisData.successEvaluation.score !== undefined) {
+          mappedData.analysis_score = analysisData.successEvaluation.score
+        }
+      }
+
+      // Store raw Vapi structured data for debugging
+      if (analysisData.structuredData) {
+        mappedData.vapi_structured_data = analysisData.structuredData
+      }
+
+      console.log('✅ Analysis data mapped successfully:', Object.keys(mappedData))
+      return mappedData
+
+    } catch (error) {
+      console.error('Error mapping analysis data:', error)
+      return mappedData
+    }
+  }
+
+  /**
    * Main function to generate and save comprehensive interview analysis
    */
   static async generateAndSaveAnalysis(sessionId: string): Promise<boolean> {

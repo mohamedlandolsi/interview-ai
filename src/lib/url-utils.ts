@@ -24,13 +24,14 @@ export function getBaseUrl(): string {
     return process.env.NEXT_PUBLIC_APP_URL
   }
 
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`
-  }
-
-  // Production fallback - use the specific domain
+  // In production, always use the specific domain unless explicitly overridden
   if (process.env.NODE_ENV === 'production') {
     return 'https://interq.vercel.app'
+  }
+
+  // Only use VERCEL_URL in development/preview environments
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`
   }
 
   // Development fallback

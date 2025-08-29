@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { buildAssistantFromTemplate, validateAssistantConfig } from '@/lib/vapi-assistant-builder';
 import { prisma } from '@/lib/prisma';
+import { getBaseUrl } from '@/lib/url-utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
       candidateName,
       position,
       companyIntegration: session.interviewer.company?.integration || null,
-      baseUrl: process.env.NEXT_PUBLIC_APP_URL || getBaseUrl(request)
+      baseUrl: process.env.NEXT_PUBLIC_APP_URL || getBaseUrl()
     });
 
     // Validate the configuration
@@ -207,21 +208,4 @@ async function createVapiAssistant(config: any): Promise<{ success: boolean; ass
       error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
-}
-
-/**
- * Extract base URL from request headers
- */
-function getBaseUrl(request: NextRequest): string {
-  const host = request.headers.get('host') || 'localhost:3000';
-  
-  // For localhost development, use production domain for webhooks
-  // since Vapi can't reach localhost
-  if (host.includes('localhost')) {
-    return 'https://interq.vercel.app';
-  }
-  
-  // For production, use HTTPS by default
-  const protocol = request.headers.get('x-forwarded-proto') || 'https';
-  return `${protocol}://${host}`;
 }
