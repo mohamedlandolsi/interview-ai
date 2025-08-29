@@ -7,6 +7,7 @@
 import { prisma } from '@/lib/prisma'
 import { InterviewSession, InterviewTemplate, InterviewStatus } from '@prisma/client'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { createNotification } from './notification-service'
 
 // Types for Vapi webhook events
 export interface VapiWebhookPayload {
@@ -108,7 +109,7 @@ export class InterviewOrchestrator {
       
       if (session) {
         // Update existing session
-        await prisma.interviewSession.update({
+        const updatedSession = await prisma.interviewSession.update({
           where: { id: session.id },
           data: {
             status: 'in_progress',
@@ -116,6 +117,14 @@ export class InterviewOrchestrator {
             vapi_assistant_id: event.call.assistantId,
             current_question_index: 0,
           }
+        })
+
+        // Create notification for interview started
+        await createNotification({
+          profileId: session.interviewer_id,
+          type: 'INTERVIEW_STARTED',
+          message: `Interview with ${session.candidate_name} has started.`,
+          link: `/interviews/${session.id}`
         })
       }
     } catch (error) {
@@ -221,7 +230,7 @@ export class InterviewOrchestrator {
     console.log('🏁 Concluding interview for call:', event.call.id)
 
     try {
-      await prisma.interviewSession.updateMany({
+      const updatedSessions = await prisma.interviewSession.updateMany({
         where: { vapi_call_id: event.call.id },
         data: {
           status: 'completed',
@@ -233,6 +242,21 @@ export class InterviewOrchestrator {
             : undefined
         }
       })
+
+      // Get the session details to create a notification
+      const session = await prisma.interviewSession.findFirst({
+        where: { vapi_call_id: event.call.id }
+      })
+
+      if (session) {
+        // Create notification for interview completed
+        await createNotification({
+          profileId: session.interviewer_id,
+          type: 'INTERVIEW_COMPLETED',
+          message: `Interview with ${session.candidate_name} has been completed.`,
+          link: `/interviews/${session.id}`
+        })
+      }
     } catch (error) {
       console.error('❌ Error concluding interview:', error)
     }

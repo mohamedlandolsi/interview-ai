@@ -7,6 +7,7 @@
 import { prisma } from '@/lib/prisma'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { InterviewSession, InterviewTemplate } from '@prisma/client'
+import { createNotification } from './notification-service'
 
 // Types for analysis results
 interface AnalysisResult {
@@ -55,6 +56,14 @@ export class InterviewAnalysisService {
           status: 'completed',
           completed_at: new Date()
         }
+      })
+
+      // Create notification for results ready
+      await createNotification({
+        profileId: updateResult.interviewer_id,
+        type: 'RESULTS_READY',
+        message: `Results for ${updateResult.candidate_name} are ready.`,
+        link: `/results/individual?id=${sessionId}`
       })
 
       console.log('✅ Vapi analysis results saved successfully for session:', sessionId)

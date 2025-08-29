@@ -25,6 +25,14 @@ enum InterviewStatus {
   cancelled
 }
 
+enum NotificationType {
+  INTERVIEW_STARTED
+  INTERVIEW_COMPLETED
+  RESULTS_READY
+  TEMPLATE_SHARED
+  GENERAL_ANNOUNCEMENT
+}
+
 // User profiles table - extends Supabase auth.users
 model Profile {
   id                      String   @id @db.Uuid
@@ -50,6 +58,7 @@ model Profile {
   // Relations
   interview_templates     InterviewTemplate[]
   interview_sessions      InterviewSession[]
+  notifications           Notification[]
 
   @@map("profiles")
 }
@@ -209,4 +218,19 @@ model ApiKey {
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   @@map("api_keys")
+}
+
+// Notifications
+model Notification {
+  id          String    @id @default(cuid())
+  profileId   String    @map("profile_id") @db.Uuid
+  type        NotificationType
+  message     String
+  link        String?   // URL to navigate to on click (e.g., /results/individual?id=...)
+  isRead      Boolean   @default(false) @map("is_read")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
 }
