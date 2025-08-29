@@ -5,6 +5,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useState } from "react";
 import { Menu, X, User, LogOut, Settings, BarChart3, FileText, Users } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -18,7 +19,7 @@ import {
 
 export function Header() {
   const [isOpen, setIsOpen] = useState(false);
-  const { user, profile, loading, signOut } = useAuth();
+  const { user, profile, company, loading, signOut } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
@@ -40,10 +41,31 @@ export function Header() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">          {/* Logo */}
           <div className="flex items-center">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <span className="text-sm font-bold text-primary-foreground">IQ</span>
-            </div>
-            <span className="ml-2 text-xl font-bold text-foreground">InterQ</span>
+            {company?.name ? (
+              <>
+                {company.logoUrl ? (
+                  <Image 
+                    src={company.logoUrl} 
+                    alt={`${company.name} logo`}
+                    width={32}
+                    height={32}
+                    className="rounded-lg object-cover"
+                  />
+                ) : (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+                    <span className="text-sm font-bold text-primary-foreground">IQ</span>
+                  </div>
+                )}
+                <span className="ml-2 text-xl font-bold text-foreground">{company.name}</span>
+              </>
+            ) : (
+              <>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+                  <span className="text-sm font-bold text-primary-foreground">IQ</span>
+                </div>
+                <span className="ml-2 text-xl font-bold text-foreground">InterQ</span>
+              </>
+            )}
           </div>          {/* Desktop Navigation */}
           <nav className="hidden md:flex md:items-center md:space-x-8">
             {!user ? (

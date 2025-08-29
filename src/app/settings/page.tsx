@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
 import { ProfileSettings } from '@/components/settings/ProfileSettings'
 import { CompanySettings } from '@/components/settings/CompanySettings'
 import { IntegrationsSettings } from '@/components/settings/IntegrationsSettings'
@@ -25,9 +26,12 @@ export default function SettingsPage() {
   // Check if user is admin
   const isAdmin = profile?.role === 'admin'
 
-  // Redirect non-admin users away from integrations tab
+  // Redirect non-admin users away from integrations tab and redirect all users away from disabled tabs
   useEffect(() => {
     if (!isAdmin && activeTab === 'integrations') {
+      setActiveTab('profile')
+    }
+    if (activeTab === 'notifications' || activeTab === 'billing') {
       setActiveTab('profile')
     }
   }, [isAdmin, activeTab])
@@ -58,13 +62,15 @@ export default function SettingsPage() {
               <span className="hidden sm:inline">Integrations</span>
             </TabsTrigger>
           )}
-          <TabsTrigger value="notifications" className="flex items-center gap-2 text-sm">
+          <TabsTrigger value="notifications" disabled className="flex items-center gap-2 text-sm opacity-50 cursor-not-allowed">
             <Bell className="h-4 w-4" />
             <span className="hidden sm:inline">Notifications</span>
+            <Badge variant="secondary" className="ml-1 text-xs">Coming Soon</Badge>
           </TabsTrigger>
-          <TabsTrigger value="billing" className="flex items-center gap-2 text-sm">
+          <TabsTrigger value="billing" disabled className="flex items-center gap-2 text-sm opacity-50 cursor-not-allowed">
             <CreditCard className="h-4 w-4" />
             <span className="hidden sm:inline">Billing</span>
+            <Badge variant="secondary" className="ml-1 text-xs">Coming Soon</Badge>
           </TabsTrigger>
         </TabsList>
 

@@ -23,7 +23,7 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
-  const { user, profile, loading, signOut } = useAuth()
+  const { user, profile, company, loading, signOut } = useAuth()
   const router = useRouter()
   const [isSigningOut, setIsSigningOut] = useState(false)
 
@@ -80,7 +80,7 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
             <div className="hidden md:block h-4 w-24 bg-muted animate-pulse rounded" />
           ) : (
             <div className="hidden md:block text-sm text-muted-foreground">
-              {profile?.company_name || 'Your Company'}
+              {company?.name || profile?.company_name || 'Your Company'}
             </div>
           )}
 

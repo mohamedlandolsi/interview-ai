@@ -6,6 +6,22 @@ import type { User as SupabaseUser, Session, AuthError } from '@supabase/supabas
 import { createClient } from '@/utils/supabase/client'
 import type { Profile } from '@/types/supabase'
 
+// Company interface
+interface Company {
+  id: string
+  name: string
+  website?: string | null
+  industry?: string | null
+  companySize?: string | null
+  description?: string | null
+  address?: string | null
+  phone?: string | null
+  email?: string | null
+  logoUrl?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 // Enhanced user profile interface
 interface UserProfile extends SupabaseUser {
   profile?: Profile
@@ -17,6 +33,7 @@ interface AuthContextType {
   user: UserProfile | null
   session: Session | null
   profile: Profile | null
+  company: Company | null
   loading: boolean
   profileLoading: boolean
   error: AuthError | null
@@ -34,6 +51,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
   profile: null,
+  company: null,
   loading: true,
   profileLoading: false,
   error: null,
@@ -63,6 +81,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<UserProfile | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [company, setCompany] = useState<Company | null>(null)
   const [loading, setLoading] = useState(true)
   const [profileLoading, setProfileLoading] = useState(false)
   const [error, setError] = useState<AuthError | null>(null)
@@ -107,6 +126,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
+  // Fetch company data
+  const fetchCompany = async (): Promise<Company | null> => {
+    try {
+      const response = await fetch('/api/company', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          // No company found, which is valid
+          setCompany(null)
+          return null
+        }
+        throw new Error(`Failed to fetch company: ${response.status}`)
+      }
+
+      const data = await response.json()
+      const companyData = data.company || null
+      setCompany(companyData)
+      return companyData
+    } catch (error) {
+      console.error('Error fetching company:', error)
+      setCompany(null)
+      return null
+    }
+  }
+
   // Create user profile in database using Prisma
   const createUserProfile = async (userId: string, email: string, metadata?: any): Promise<{ error: any }> => {
     try {
@@ -146,6 +195,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (user?.id) {
       const profileData = await fetchProfile(user.id)
       setProfile(profileData)
+      // Also fetch company data
+      await fetchCompany()
     }
   }
 
@@ -168,6 +219,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
             // Fetch user profile
             const profileData = await fetchProfile(session.user.id)
             setProfile(profileData)
+            // Fetch company data
+            await fetchCompany()
           }
         }
       } catch (err) {
@@ -207,6 +260,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
             console.error('Failed to create user profile:', createError)
           }
         }
+
+        // Fetch company data
+        await fetchCompany()
           // Update email verification status if verified
         if (profileData && session.user.email_confirmed_at && !profileData.email_verified) {
           try {
@@ -223,6 +279,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
             if (response.ok) {
               // Refresh profile data to get updated verification status
               profileData = await fetchProfile(session.user.id)
+              // Also refresh company data
+              await fetchCompany()
             }
           } catch (error) {
             console.error('Failed to update email verification status:', error)
@@ -233,6 +291,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } else {
         setUser(null)
         setProfile(null)
+        setCompany(null)
       }
 
       setLoading(false)      // Handle different auth events
@@ -420,6 +479,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     session,
     profile,
+    company,
     loading,
     profileLoading,
     error,

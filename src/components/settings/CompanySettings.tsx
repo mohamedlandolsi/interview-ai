@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { useAuth } from '@/contexts/AuthContext'
 import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { 
@@ -136,6 +137,7 @@ const mockTeamMembers: TeamMember[] = [
 ]
 
 export function CompanySettings() {
+  const { refreshProfile } = useAuth()
   const [company, setCompany] = useState<Company | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -219,6 +221,9 @@ export function CompanySettings() {
 
       const result = await response.json()
       setCompany(result.company)
+      
+      // Refresh the AuthContext to update company data globally
+      await refreshProfile()
       
       toast.success(company ? "Company information updated successfully." : "Company created successfully.")
     } catch (err) {
