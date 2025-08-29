@@ -47,8 +47,7 @@ export async function POST() {
       sessionId: 'test-session-123',
       candidateName: 'Test Candidate',
       position: 'Software Engineer',
-      companyIntegration: null,
-      baseUrl: 'https://interq.vercel.app'
+      companyIntegration: null
     });
 
     console.log('🔧 Built assistant config...');

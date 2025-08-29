@@ -4,6 +4,52 @@
 
 # Quick orientation
 
+This is a Next.js (app router) TypeScript app that combines Supabase (auth + storage), Prisma (schema & migrations), and Vapi (@vapi-ai/web) for interview voice/AI analysis. UI uses React server/client components and Tailwind.
+
+Start here (minimal reading order):
+- `src/utils/supabase/server.ts` — server-only Supabase client helpers.
+- `src/utils/supabase/middleware.ts` and `middleware.ts` — cookie handling and global route protection.
+- `src/app/api/**/route.ts` — canonical API route handlers and the `X-User-*` header pattern.
+- Vapi surface: `src/lib/vapi-assistant-config.ts`, `src/lib/vapi-assistant-service.ts`, `src/hooks/useVapi.ts`, and the webhook `src/app/api/vapi/webhook/route.ts`.
+
+Key commands (verified in package.json):
+- Dev: `npm run dev`
+- Build (runs Prisma generate): `npm run build`
+- Start prod: `npm run start`
+- Tests (Jest): `npm run test` (watch: `npm run test:watch`)
+- Prisma helpers: `npm run db:generate`, `npm run db:migrate`, `npm run db:seed`, `npm run db:studio`
+
+Concrete, project-specific rules and gotchas:
+- Supabase server vs client: use `createClient()` from `src/utils/supabase/server.ts` inside Server Components and API routes. Client components must only use public anon keys (`NEXT_PUBLIC_SUPABASE_*`).
+- Middleware cookie handling: `createMiddlewareClient()` returns `{ supabase, response }` and mutates `response`. Middleware MUST return that mutated `response` so cookies persist (see `src/utils/supabase/middleware.ts`).
+- Auth headers and tests: API handlers use `X-User-*` headers (e.g., `X-User-Id`, `X-User-Email`) to carry authenticated user info in internal server-to-server calls; tests and API mocks depend on that pattern (see `src/__tests__/middleware/*`).
+- Vapi assistant strategy: the repo uses a single shared assistant — prefer `NEXT_PUBLIC_VAPI_ASSISTANT_ID` and avoid creating assistants per interview (see `VAPI_SINGLE_ASSISTANT_FIX.md`).
+- Webhook security: server webhook handlers validate `VAPI_WEBHOOK_SECRET` and use `VAPI_PRIVATE_KEY` server-side; do not expose these to the client.
+
+DB/Migrations and PR workflow:
+- Change models in `prisma/schema.prisma`.
+- Run `npm run db:generate` then `npm run db:migrate` locally. `npm run build` triggers `prisma generate` so run build before opening a PR.
+- If you change server DB code, add/modify tests and update `src/__tests__/middleware/*` mocks if auth flow changed.
+
+Files worth scanning for examples and patterns:
+- Auth & middleware: `middleware.ts`, `src/utils/supabase/middleware.ts`, `src/utils/supabase/server.ts`
+- Vapi & interview: `src/lib/vapi-assistant-config.ts`, `src/lib/vapi-assistant-service.ts`, `src/hooks/useVapi.ts`, `src/lib/interview-session.ts`, `src/lib/interview-analysis.ts`, `src/app/api/vapi/webhook/route.ts`
+- DB & migrations: `prisma/schema.prisma`, `supabase/migrations/`
+- Tests: `src/__tests__/**`, `jest.config.js`, `jest.setup.js`, `test-vapi-prompts.js`
+
+Minimal PR checklist for AI agents:
+1. Reference changed files in PR body.
+2. Run `npm run build` and fix build/type errors.
+3. Run `npm test` and fix failing Jest tests (check `src/__tests__/middleware/*` and API mocks first).
+4. Ensure no server secrets or service-role keys are leaked into client code. Server-only envs: `SUPABASE_SERVICE_ROLE_KEY`, `VAPI_PRIVATE_KEY`, `VAPI_WEBHOOK_SECRET`, `DATABASE_URL`.
+
+If a section is unclear or you want examples (local DB setup, migration steps, test-mock patterns, or Vercel deploy notes), ask for that section and I will expand with concrete examples.
+<!-- .github/copilot-instructions.md
+     Purpose: focused, actionable guidance for AI coding agents working in this repo.
+-->
+
+# Quick orientation
+
 Small summary: This is a Next.js (app router) TypeScript app that uses Supabase for auth/storage, Prisma for schema & migrations, and Vapi (@vapi-ai/web) for interview voice/AI analysis. UI uses React (server/client components) and Tailwind.
 
 # Where to start (concrete)

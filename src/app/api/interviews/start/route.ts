@@ -7,7 +7,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { buildAssistantFromTemplate, validateAssistantConfig } from '@/lib/vapi-assistant-builder';
 import { prisma } from '@/lib/prisma';
-import { getBaseUrl } from '@/lib/url-utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -71,21 +70,26 @@ export async function POST(request: NextRequest) {
       sessionId: interviewSessionId,
       candidateName,
       position,
-      companyIntegration: session.interviewer.company?.integration || null,
-      baseUrl: process.env.NEXT_PUBLIC_APP_URL || getBaseUrl()
+      companyIntegration: session.interviewer.company?.integration || null
     });
 
-    // Validate the configuration
+    // PART 3: PRE-FLIGHT VALIDATION - Validate before sending to Vapi
     const validation = validateAssistantConfig(assistantConfig);
     if (!validation.isValid) {
-      console.error('Invalid assistant configuration:', validation.errors);
-      return NextResponse.json(
-        { error: 'Failed to create valid assistant configuration', details: validation.errors },
-        { status: 500 }
-      );
+      console.error('❌ Vapi assistant validation failed:', validation.errors);
+      // Throw detailed error instead of returning JSON response to get proper stack trace
+      throw new Error(`Invalid Vapi assistant configuration: ${validation.errors.join(', ')}`);
     }
 
-    console.log('🔧 Assistant config preview:', JSON.stringify({
+    console.log('✅ Assistant configuration validation passed');
+
+    // PART 1: ENHANCED LOGGING - Full assistant configuration for debugging
+    console.log("--- VAPI ASSISTANT CONFIGURATION ---");
+    console.log(JSON.stringify(assistantConfig, null, 2));
+    console.log("---------------------------------");
+
+    // Also log a summary for quick reference
+    console.log('🔧 Assistant config summary:', JSON.stringify({
       name: assistantConfig.name,
       model: assistantConfig.model?.provider + '/' + assistantConfig.model?.model,
       voice: assistantConfig.voice?.provider + '/' + assistantConfig.voice?.voiceId,
@@ -96,7 +100,7 @@ export async function POST(request: NextRequest) {
       webhookUrl: assistantConfig.serverUrl
     }, null, 2));
 
-    // Also log first 500 chars of system prompt for debugging
+    // Log first 500 chars of system prompt for debugging
     if (assistantConfig.model?.messages?.[0]?.content) {
       console.log('📋 System prompt preview:', assistantConfig.model.messages[0].content.substring(0, 500) + '...');
     }
@@ -157,6 +161,10 @@ async function createVapiAssistant(config: any): Promise<{ success: boolean; ass
       };
     }
 
+    // Log the exact payload being sent to Vapi for debugging
+    console.log('📤 Sending payload to Vapi API:');
+    console.log(JSON.stringify(config, null, 2));
+
     const response = await fetch('https://api.vapi.ai/assistant', {
       method: 'POST',
       headers: {
@@ -187,6 +195,7 @@ async function createVapiAssistant(config: any): Promise<{ success: boolean; ass
     }
 
     const data = await response.json();
+    console.log('✅ Vapi assistant created successfully:', data.id);
     
     if (!data.id) {
       console.error('Vapi assistant created but no ID returned:', data);
@@ -202,7 +211,7 @@ async function createVapiAssistant(config: any): Promise<{ success: boolean; ass
     };
 
   } catch (error) {
-    console.error('Error creating Vapi assistant:', error);
+    console.error('❌ Error creating Vapi assistant:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'

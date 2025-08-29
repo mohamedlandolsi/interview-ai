@@ -40,8 +40,7 @@ export async function POST() {
       sessionId: 'test-session-123',
       candidateName: 'Test Candidate',
       position: 'Software Engineer',
-      companyIntegration: null,
-      baseUrl: 'http://localhost:3000'  // This will now use interq.vercel.app for webhooks
+      companyIntegration: null
     });
 
     console.log('🔧 Built assistant config...');

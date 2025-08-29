@@ -3,6 +3,13 @@
  * Builds transient assistant configurations from InterviewTemplate data
  */
 
+// TODO: Ensure this new environment variable is set in all environments.
+// In .env.local (for development):
+// APP_URL=http://localhost:3000
+//
+// In Vercel (for production):
+// Add an environment variable named APP_URL with the value of your production domain (e.g., https://yourapp.vercel.app).
+
 import { InterviewTemplate, CompanyIntegration } from '@prisma/client';
 import { createInterviewAssistantConfig } from './vapi-assistant-config';
 
@@ -55,7 +62,6 @@ interface BuildAssistantOptions {
   candidateName: string;
   position: string;
   companyIntegration?: CompanyIntegration | null;
-  baseUrl?: string;
 }
 
 /**
@@ -67,8 +73,7 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
     sessionId,
     candidateName,
     position,
-    companyIntegration,
-    baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://localhost:3000'
+    companyIntegration
   } = options;
 
   // Define robust default values for voice configuration
@@ -90,15 +95,14 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
   // PRODUCTION-READY: Get comprehensive Vapi analysis configuration
   const vapiAnalysisConfig = getVapiAnalysisConfig(candidateName, position, questions);
 
-  // For development, use the production webhook URL since Vapi needs to reach it
-  // In production, this will be the real webhook URL
-  let webhookUrl: string;
-  if (baseUrl.includes('localhost')) {
-    // Use production domain for webhooks even in development since Vapi can't reach localhost
-    webhookUrl = `https://interq.vercel.app/api/vapi/webhook?sessionId=${sessionId}`;
-  } else {
-    webhookUrl = `${baseUrl}/api/vapi/webhook?sessionId=${sessionId}`;
+  // PART 2: ROBUST SERVER-SIDE WEBHOOK URL CONSTRUCTION
+  const appBaseUrl = process.env.APP_URL;
+  if (!appBaseUrl) {
+    // This will provide a clear error in the logs if the variable is missing.
+    throw new Error("APP_URL environment variable is not set.");
   }
+
+  const webhookUrl = `${appBaseUrl}/api/vapi/webhook?sessionId=${sessionId}`;
 
   const config: VapiAssistantConfig = {
     name: `Interview: ${candidateName} - ${position}`.substring(0, 40),
@@ -356,7 +360,7 @@ export function validateAssistantConfig(config: VapiAssistantConfig): { isValid:
     }
   }
 
-  // CRITICAL: Voice configuration validation
+  // CRITICAL: Voice configuration validation (the most common source of 400 errors)
   if (!config.voice?.provider || typeof config.voice.provider !== 'string' || config.voice.provider.trim().length === 0) {
     errors.push('Voice provider is required and must be a non-empty string');
   }
@@ -365,18 +369,23 @@ export function validateAssistantConfig(config: VapiAssistantConfig): { isValid:
     errors.push('Voice ID is required and must be a non-empty string');
   }
 
-  // Validate supported voice providers
+  // Validate supported voice providers (exact match against Vapi's accepted values)
   if (config.voice?.provider) {
-    const supportedVoiceProviders = ['11labs', 'azure', 'playht', 'rime', 'neets'];
-    if (!supportedVoiceProviders.includes(config.voice.provider.toLowerCase())) {
-      errors.push(`Unsupported voice provider: ${config.voice.provider}. Supported: ${supportedVoiceProviders.join(', ')}`);
+    const supportedVoiceProviders = ['11labs', 'azure', 'playht', 'rime', 'neets', 'openai'];
+    const normalizedProvider = config.voice.provider.toLowerCase().trim();
+    if (!supportedVoiceProviders.includes(normalizedProvider)) {
+      errors.push(`Unsupported voice provider: "${config.voice.provider}". Must be one of: ${supportedVoiceProviders.join(', ')}`);
     }
   }
 
-  // Validate 11labs voice ID format
+  // Validate 11labs voice ID format (most commonly used provider)
   if (config.voice?.provider === '11labs' && config.voice?.voiceId) {
     if (config.voice.voiceId.length !== 20) {
-      errors.push(`Invalid 11labs voice ID format: ${config.voice.voiceId}. Should be exactly 20 characters.`);
+      errors.push(`Invalid 11labs voice ID format: "${config.voice.voiceId}". Must be exactly 20 characters.`);
+    }
+    // Additional 11labs validation - should be alphanumeric
+    if (!/^[a-zA-Z0-9]{20}$/.test(config.voice.voiceId)) {
+      errors.push(`Invalid 11labs voice ID: "${config.voice.voiceId}". Must contain only letters and numbers.`);
     }
   }
 
@@ -385,11 +394,24 @@ export function validateAssistantConfig(config: VapiAssistantConfig): { isValid:
     errors.push('Transcriber provider is required and must be a string');
   }
 
+  if (!config.transcriber?.model || typeof config.transcriber.model !== 'string') {
+    errors.push('Transcriber model is required and must be a string');
+  }
+
   // Validate supported transcriber providers
   if (config.transcriber?.provider) {
     const supportedTranscriberProviders = ['deepgram', 'assembly', 'azure'];
-    if (!supportedTranscriberProviders.includes(config.transcriber.provider.toLowerCase())) {
-      errors.push(`Unsupported transcriber provider: ${config.transcriber.provider}. Supported: ${supportedTranscriberProviders.join(', ')}`);
+    const normalizedProvider = config.transcriber.provider.toLowerCase().trim();
+    if (!supportedTranscriberProviders.includes(normalizedProvider)) {
+      errors.push(`Unsupported transcriber provider: "${config.transcriber.provider}". Must be one of: ${supportedTranscriberProviders.join(', ')}`);
+    }
+  }
+
+  // Validate Deepgram models (most commonly used)
+  if (config.transcriber?.provider === 'deepgram' && config.transcriber?.model) {
+    const supportedDeepgramModels = ['nova-2', 'nova', 'enhanced', 'base'];
+    if (!supportedDeepgramModels.includes(config.transcriber.model)) {
+      errors.push(`Unsupported Deepgram model: "${config.transcriber.model}". Must be one of: ${supportedDeepgramModels.join(', ')}`);
     }
   }
 
