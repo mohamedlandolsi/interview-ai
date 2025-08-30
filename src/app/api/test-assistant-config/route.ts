@@ -47,16 +47,21 @@ export async function GET(request: NextRequest) {
       position: 'Software Developer'
     })
 
-    // Check if analysis fields are present
+    // Check if analysis fields are present (updated to analysisPlan)
+    const sp = assistantConfig.analysisPlan?.summaryPlan?.messages?.[0]?.content
+    const ep = assistantConfig.analysisPlan?.successEvaluationPlan?.messages?.[0]?.content
+    const dp = assistantConfig.analysisPlan?.structuredDataPlan?.messages?.[0]?.content
+    const ds = assistantConfig.analysisPlan?.structuredDataPlan?.schema
+
     const hasAnalysisFields = {
-      hasSummaryPrompt: !!assistantConfig.analysis?.summaryPrompt,
-      hasSuccessEvaluationPrompt: !!assistantConfig.analysis?.successEvaluationPrompt,
-      hasStructuredDataPrompt: !!assistantConfig.analysis?.structuredDataPrompt,
-      hasStructuredDataSchema: !!assistantConfig.analysis?.structuredDataSchema,
-      summaryPromptLength: assistantConfig.analysis?.summaryPrompt?.length || 0,
-      successEvaluationPromptLength: assistantConfig.analysis?.successEvaluationPrompt?.length || 0,
-      structuredDataPromptLength: assistantConfig.analysis?.structuredDataPrompt?.length || 0,
-      structuredDataSchemaKeys: assistantConfig.analysis?.structuredDataSchema ? Object.keys(assistantConfig.analysis.structuredDataSchema) : []
+      hasSummaryPrompt: !!sp,
+      hasSuccessEvaluationPrompt: !!ep,
+      hasStructuredDataPrompt: !!dp,
+      hasStructuredDataSchema: !!ds,
+      summaryPromptLength: sp?.length || 0,
+      successEvaluationPromptLength: ep?.length || 0,
+      structuredDataPromptLength: dp?.length || 0,
+      structuredDataSchemaKeys: ds ? Object.keys(ds) : []
     }
 
     return NextResponse.json({
@@ -67,12 +72,13 @@ export async function GET(request: NextRequest) {
         name: assistantConfig.name,
         model: assistantConfig.model,
         voice: assistantConfig.voice,
-        analysis: assistantConfig.analysis,
+        server: assistantConfig.server,
+        analysisPlan: assistantConfig.analysisPlan,
         // Include first 100 chars of each analysis field for verification
-        summaryPromptPreview: assistantConfig.analysis?.summaryPrompt?.substring(0, 100) + '...',
-        successEvaluationPromptPreview: assistantConfig.analysis?.successEvaluationPrompt?.substring(0, 100) + '...',
-        structuredDataPromptPreview: assistantConfig.analysis?.structuredDataPrompt?.substring(0, 100) + '...',
-        structuredDataSchemaPreview: assistantConfig.analysis?.structuredDataSchema
+        summaryPromptPreview: sp ? sp.substring(0, 100) + '...' : undefined,
+        successEvaluationPromptPreview: ep ? ep.substring(0, 100) + '...' : undefined,
+        structuredDataPromptPreview: dp ? dp.substring(0, 100) + '...' : undefined,
+        structuredDataSchemaPreview: ds
       }
     })
 

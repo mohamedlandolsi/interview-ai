@@ -37,26 +37,35 @@ export interface VapiAssistantConfig {
     language: string;
   };
   firstMessage?: string;
-  recordingEnabled: boolean;
   endCallMessage: string;
   endCallPhrases: string[];
-  endCallFunctionEnabled: boolean;
   maxDurationSeconds: number;
-  silenceTimeoutSeconds: number;
-  responseDelaySeconds: number;
-  backgroundDenoisingEnabled: boolean;
-  serverUrl?: string;
-  serverUrlSecret?: string;
-  // CORRECTED: Analysis configuration properly nested
-  analysis?: {
-    type: string;
-    summaryPrompt?: string;
-    successEvaluationPrompt?: string;
-    structuredDataPrompt?: string;
-    structuredDataSchema?: any;
-    summaryRequestTimeoutSeconds?: number;
-    successEvaluationRequestTimeoutSeconds?: number;
-    structuredDataRequestTimeoutSeconds?: number;
+  // Optional advanced plans can be added as needed; keeping payload minimal avoids 400s
+  // New server object shape per Vapi API
+  server?: {
+    url: string;
+    headers?: Record<string, string>;
+    timeoutSeconds?: number;
+  };
+  // Updated: use analysisPlan per current Vapi API
+  analysisPlan?: {
+    summaryPlan?: {
+      enabled?: boolean;
+      messages: Array<{ role: string; content: string }>;
+      timeoutSeconds?: number;
+    };
+    successEvaluationPlan?: {
+      enabled?: boolean;
+      messages: Array<{ role: string; content: string }>;
+      timeoutSeconds?: number;
+      rubric?: string;
+    };
+    structuredDataPlan?: {
+      enabled?: boolean;
+      messages: Array<{ role: string; content: string }>;
+      schema: any;
+      timeoutSeconds?: number;
+    };
   };
 }
 
@@ -127,27 +136,33 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
       language: companyIntegration?.vapiLanguage || "en-US"
     },
     firstMessage: buildFirstMessage(candidateName, position, template),
-    recordingEnabled: true,
     endCallMessage: "Thank you for your time today. We'll be in touch with next steps soon. Have a great day!",
     endCallPhrases: ["goodbye", "end interview", "that concludes our interview", "thank you for your time"],
-    endCallFunctionEnabled: false, // Prevent accidental endings
     maxDurationSeconds: (template.duration || 30) * 60, // Convert minutes to seconds
-    silenceTimeoutSeconds: 60, // Generous timeout
-    responseDelaySeconds: 1.0,
-    backgroundDenoisingEnabled: true,
-    serverUrl: webhookUrl,
-    serverUrlSecret: process.env.VAPI_WEBHOOK_SECRET,
+    // New server object expected by Vapi
+    server: {
+      url: webhookUrl
+    },
     
-    // PART 1: CORRECTED ANALYSIS STRUCTURE - Nest all analysis fields properly
-    analysis: {
-      type: "output", // This is crucial for Vapi API compliance
-      summaryPrompt: vapiAnalysisConfig.summaryPrompt,
-      successEvaluationPrompt: vapiAnalysisConfig.successEvaluationPrompt,
-      structuredDataPrompt: vapiAnalysisConfig.structuredDataPrompt,
-      structuredDataSchema: vapiAnalysisConfig.structuredDataSchema,
-      summaryRequestTimeoutSeconds: 30,
-      successEvaluationRequestTimeoutSeconds: 30,
-      structuredDataRequestTimeoutSeconds: 30
+    // Updated analysis using analysisPlan structure
+    analysisPlan: {
+      summaryPlan: {
+        enabled: true,
+        messages: [{ role: 'system', content: vapiAnalysisConfig.summaryPrompt }],
+        timeoutSeconds: 30
+      },
+      successEvaluationPlan: {
+        enabled: true,
+        messages: [{ role: 'system', content: vapiAnalysisConfig.successEvaluationPrompt }],
+        timeoutSeconds: 30,
+        rubric: 'NumericScale'
+      },
+      structuredDataPlan: {
+        enabled: true,
+        messages: [{ role: 'system', content: vapiAnalysisConfig.structuredDataPrompt }],
+        schema: vapiAnalysisConfig.structuredDataSchema,
+        timeoutSeconds: 30
+      }
     }
   };
 
@@ -188,6 +203,9 @@ Extract structured interview data. Include overall score (0-100), category score
 Be objective and data-focused.
 `.trim();
 
+  // Debug: Log the actual prompt lengths
+  console.log(`📏 Prompt lengths - Summary: ${summaryPrompt.length}, Success: ${successEvaluationPrompt.length}, Structured: ${structuredDataPrompt.length}`);
+  
   const structuredDataSchema = {
     type: "object",
     properties: {
@@ -475,53 +493,45 @@ export function validateAssistantConfig(config: VapiAssistantConfig): { isValid:
     }
   }
 
-  // Webhook URL validation (CRITICAL for Vapi functionality)
-  if (!config.serverUrl || typeof config.serverUrl !== 'string' || config.serverUrl.trim().length === 0) {
-    errors.push('Server URL for webhooks is required and must be a non-empty string');
-  } else if (!config.serverUrl.startsWith('http://') && !config.serverUrl.startsWith('https://')) {
-    errors.push(`Invalid webhook URL format: ${config.serverUrl}. Must start with http:// or https://`);
-  } else if (config.serverUrl.includes('localhost') && !config.serverUrl.startsWith('https://')) {
-    errors.push(`Localhost webhook URL must use HTTPS tunnel (ngrok). Current: ${config.serverUrl}`);
+  // Webhook server object validation (CRITICAL for Vapi functionality)
+  if (!config.server || typeof config.server.url !== 'string' || config.server.url.trim().length === 0) {
+    errors.push('Server.url for webhooks is required and must be a non-empty string');
+  } else if (!config.server.url.startsWith('http://') && !config.server.url.startsWith('https://')) {
+    errors.push(`Invalid webhook URL format: ${config.server.url}. Must start with http:// or https://`);
+  } else if (config.server.url.includes('localhost') && !config.server.url.startsWith('https://')) {
+    // For development, warn but don't fail validation
+    console.warn(`⚠️  Development Warning: Localhost webhook URL should use HTTPS tunnel (ngrok) for actual Vapi testing. Current: ${config.server.url}`);
+    console.warn(`⚠️  To test with Vapi: 1) Run 'ngrok http 3000', 2) Set VAPI_WEBHOOK_TUNNEL_URL in .env.local`);
   }
 
-  // Analysis configuration validation (NEW STRUCTURE)
-  if (config.analysis) {
-    if (!config.analysis.type || config.analysis.type !== 'output') {
-      errors.push('Analysis type must be set to "output"');
+  // AnalysisPlan configuration validation (updated)
+  if (config.analysisPlan) {
+    const sp = config.analysisPlan.summaryPlan;
+    const ep = config.analysisPlan.successEvaluationPlan;
+    const dp = config.analysisPlan.structuredDataPlan;
+
+    const getFirstContent = (messages?: Array<{ role: string; content: string }>) => messages && messages[0]?.content;
+
+    const summaryText = getFirstContent(sp?.messages);
+    const successText = getFirstContent(ep?.messages);
+    const dataText = getFirstContent(dp?.messages);
+
+    if (summaryText && summaryText.length > 1000) {
+      errors.push(`Summary prompt too long: ${summaryText.length} chars (max 1000)`);
     }
-    
-    // Validate prompt lengths (1000 character limit)
-    if (config.analysis.summaryPrompt && config.analysis.summaryPrompt.length > 1000) {
-      errors.push(`Summary prompt too long: ${config.analysis.summaryPrompt.length} chars (max 1000)`);
+    if (successText && successText.length > 1000) {
+      errors.push(`Success evaluation prompt too long: ${successText.length} chars (max 1000)`);
     }
-    
-    if (config.analysis.successEvaluationPrompt && config.analysis.successEvaluationPrompt.length > 1000) {
-      errors.push(`Success evaluation prompt too long: ${config.analysis.successEvaluationPrompt.length} chars (max 1000)`);
-    }
-    
-    if (config.analysis.structuredDataPrompt && config.analysis.structuredDataPrompt.length > 1000) {
-      errors.push(`Structured data prompt too long: ${config.analysis.structuredDataPrompt.length} chars (max 1000)`);
+    if (dataText && dataText.length > 1000) {
+      errors.push(`Structured data prompt too long: ${dataText.length} chars (max 1000)`);
     }
   }
 
-  // Duration and timeout validation
+  // Duration validation
   if (config.maxDurationSeconds && (typeof config.maxDurationSeconds !== 'number' || config.maxDurationSeconds <= 0)) {
     errors.push('Max duration must be a positive number');
   } else if (config.maxDurationSeconds && config.maxDurationSeconds > 7200) {
     errors.push('Max duration cannot exceed 2 hours (7200 seconds)');
-  }
-
-  if (config.silenceTimeoutSeconds && (typeof config.silenceTimeoutSeconds !== 'number' || config.silenceTimeoutSeconds <= 0)) {
-    errors.push('Silence timeout must be a positive number');
-  }
-
-  // Validate required boolean fields
-  if (typeof config.recordingEnabled !== 'boolean') {
-    errors.push('Recording enabled must be a boolean value');
-  }
-
-  if (typeof config.endCallFunctionEnabled !== 'boolean') {
-    errors.push('End call function enabled must be a boolean value');
   }
 
   // Validate messages array in model config

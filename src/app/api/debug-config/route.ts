@@ -45,7 +45,7 @@ export async function POST() {
 
     console.log('🔧 Built assistant config...');
     console.log('📋 Voice config:', JSON.stringify(assistantConfig.voice, null, 2));
-    console.log('📋 Server URL:', assistantConfig.serverUrl);
+  console.log('📋 Server URL:', assistantConfig.server?.url);
     console.log('📋 Full config:', JSON.stringify(assistantConfig, null, 2));
 
     // Validate the configuration

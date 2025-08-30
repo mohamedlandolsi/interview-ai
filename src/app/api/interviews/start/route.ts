@@ -96,8 +96,8 @@ export async function POST(request: NextRequest) {
       transcriber: assistantConfig.transcriber?.provider,
       maxDuration: assistantConfig.maxDurationSeconds,
       endCallPhrases: assistantConfig.endCallPhrases?.length || 0,
-      hasServerUrl: !!assistantConfig.serverUrl,
-      webhookUrl: assistantConfig.serverUrl
+      hasServerUrl: !!assistantConfig.server?.url,
+      webhookUrl: assistantConfig.server?.url
     }, null, 2));
 
     // Log first 500 chars of system prompt for debugging
