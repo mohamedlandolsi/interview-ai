@@ -11,7 +11,6 @@
 // Add an environment variable named APP_URL with the value of your production domain (e.g., https://yourapp.vercel.app).
 
 import { InterviewTemplate, CompanyIntegration } from '@prisma/client';
-import { createInterviewAssistantConfig } from './vapi-assistant-config';
 
 export interface VapiAssistantConfig {
   name: string;
@@ -48,12 +47,17 @@ export interface VapiAssistantConfig {
   backgroundDenoisingEnabled: boolean;
   serverUrl?: string;
   serverUrlSecret?: string;
-  // PRODUCTION-READY: Vapi Analysis Configuration (new format)
-  summaryPrompt?: string;
-  successEvaluationPrompt?: string;
-  structuredDataPrompt?: string;
-  structuredDataSchema?: any;
-  llmRequestNonStreamingTimeoutSeconds?: number;
+  // CORRECTED: Analysis configuration properly nested
+  analysis?: {
+    type: string;
+    summaryPrompt?: string;
+    successEvaluationPrompt?: string;
+    structuredDataPrompt?: string;
+    structuredDataSchema?: any;
+    summaryRequestTimeoutSeconds?: number;
+    successEvaluationRequestTimeoutSeconds?: number;
+    structuredDataRequestTimeoutSeconds?: number;
+  };
 }
 
 interface BuildAssistantOptions {
@@ -95,14 +99,23 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
   // PRODUCTION-READY: Get comprehensive Vapi analysis configuration
   const vapiAnalysisConfig = getVapiAnalysisConfig(candidateName, position, questions);
 
-  // PART 2: ROBUST SERVER-SIDE WEBHOOK URL CONSTRUCTION
-  const appBaseUrl = process.env.APP_URL;
-  if (!appBaseUrl) {
-    // This will provide a clear error in the logs if the variable is missing.
-    throw new Error("APP_URL environment variable is not set.");
-  }
+  // PART 3: ROBUST WEBHOOK URL WITH LOCAL DEVELOPMENT SUPPORT
+  let webhookUrl: string;
 
-  const webhookUrl = `${appBaseUrl}/api/vapi/webhook?sessionId=${sessionId}`;
+  // For local development, use a tunnel service like ngrok.
+  // 1. Run `ngrok http 3000` in a separate terminal.
+  // 2. Copy the HTTPS forwarding URL.
+  // 3. Set VAPI_WEBHOOK_TUNNEL_URL in your .env.local file to that URL.
+  if (process.env.NODE_ENV === 'development' && process.env.VAPI_WEBHOOK_TUNNEL_URL) {
+    webhookUrl = `${process.env.VAPI_WEBHOOK_TUNNEL_URL}/api/vapi/webhook?sessionId=${sessionId}`;
+    console.log('🔗 Using tunnel URL for local development:', webhookUrl);
+  } else {
+    const appBaseUrl = process.env.APP_URL;
+    if (!appBaseUrl) {
+      throw new Error("APP_URL environment variable is not set for production.");
+    }
+    webhookUrl = `${appBaseUrl}/api/vapi/webhook?sessionId=${sessionId}`;
+  }
 
   const config: VapiAssistantConfig = {
     name: `Interview: ${candidateName} - ${position}`.substring(0, 40),
@@ -124,12 +137,18 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
     backgroundDenoisingEnabled: true,
     serverUrl: webhookUrl,
     serverUrlSecret: process.env.VAPI_WEBHOOK_SECRET,
-    // PRODUCTION-READY: Enable Vapi's post-call analysis features
-    summaryPrompt: vapiAnalysisConfig.summaryPrompt,
-    successEvaluationPrompt: vapiAnalysisConfig.successEvaluationPrompt,
-    structuredDataPrompt: vapiAnalysisConfig.structuredDataPrompt,
-    structuredDataSchema: vapiAnalysisConfig.structuredDataSchema,
-    llmRequestNonStreamingTimeoutSeconds: 60
+    
+    // PART 1: CORRECTED ANALYSIS STRUCTURE - Nest all analysis fields properly
+    analysis: {
+      type: "output", // This is crucial for Vapi API compliance
+      summaryPrompt: vapiAnalysisConfig.summaryPrompt,
+      successEvaluationPrompt: vapiAnalysisConfig.successEvaluationPrompt,
+      structuredDataPrompt: vapiAnalysisConfig.structuredDataPrompt,
+      structuredDataSchema: vapiAnalysisConfig.structuredDataSchema,
+      summaryRequestTimeoutSeconds: 30,
+      successEvaluationRequestTimeoutSeconds: 30,
+      structuredDataRequestTimeoutSeconds: 30
+    }
   };
 
   // PRODUCTION-READY: Final validation before returning config
@@ -144,20 +163,61 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
 }
 
 /**
- * Extract Vapi analysis configuration from the comprehensive config
- * PRODUCTION-READY: Enables post-call analysis features
+ * PART 2: Create shortened analysis prompts under 1000 characters
+ * These concise prompts are optimized for Vapi's analysis system
+ */
+function buildAnalysisSchema(candidateName: string, position: string, questions: string[]) {
+  // Aggressively shortened summary prompt (under 1000 chars)
+  const summaryPrompt = `
+Analyze this interview transcript. Create a JSON array of question-answer pairs.
+For each pair include: "question" (string), "answer" (string), "score" (number 1-10), "evaluation" (brief assessment).
+Format: [{"question": "...", "answer": "...", "score": 8, "evaluation": "..."}]
+Focus on key questions and responses. Be concise.
+`.trim();
+
+  // Shortened success evaluation prompt
+  const successEvaluationPrompt = `
+Evaluate interview for ${position}. Rate: Communication (25%), Technical Skills (30%), Experience (25%), Cultural Fit (20%).
+Score each 0-100. Provide hiring recommendation (hire/no hire) with brief reasoning.
+Format: {"overall": 85, "communication": 90, "technical": 80, "experience": 85, "fit": 90, "recommendation": "hire", "reason": "..."}
+`.trim();
+
+  // Shortened structured data prompt  
+  const structuredDataPrompt = `
+Extract structured interview data. Include overall score (0-100), category scores, and key strengths/weaknesses.
+Be objective and data-focused.
+`.trim();
+
+  const structuredDataSchema = {
+    type: "object",
+    properties: {
+      overallScore: { type: "number", minimum: 0, maximum: 100 },
+      communication: { type: "number", minimum: 0, maximum: 100 },
+      technical: { type: "number", minimum: 0, maximum: 100 },
+      experience: { type: "number", minimum: 0, maximum: 100 },
+      culturalFit: { type: "number", minimum: 0, maximum: 100 },
+      recommendation: { type: "string", enum: ["hire", "no-hire", "maybe"] },
+      strengths: { type: "array", items: { type: "string" } },
+      weaknesses: { type: "array", items: { type: "string" } }
+    },
+    required: ["overallScore", "recommendation"]
+  };
+
+  return {
+    summaryPrompt,
+    successEvaluationPrompt,
+    structuredDataPrompt,
+    structuredDataSchema
+  };
+}
+
+/**
+ * Extract Vapi analysis configuration with shortened prompts
+ * PRODUCTION-READY: Uses concise prompts that comply with Vapi limits
  */
 function getVapiAnalysisConfig(candidateName: string, position: string, questions: string[]) {
-  // Get the comprehensive configuration from vapi-assistant-config.ts
-  const fullConfig = createInterviewAssistantConfig(candidateName, position, questions);
-  
-  // Extract just the analysis configuration parts for the new Vapi format
-  return {
-    summaryPrompt: fullConfig.analysisSchema?.summaryPrompt || '',
-    successEvaluationPrompt: fullConfig.analysisSchema?.successEvaluationPrompt || '',
-    structuredDataPrompt: fullConfig.analysisSchema?.structuredDataPrompt || '',
-    structuredDataSchema: fullConfig.analysisSchema?.structuredDataSchema || {}
-  };
+  // Use the new shortened analysis schema instead of the verbose one
+  return buildAnalysisSchema(candidateName, position, questions);
 }
 
 /**
@@ -420,6 +480,28 @@ export function validateAssistantConfig(config: VapiAssistantConfig): { isValid:
     errors.push('Server URL for webhooks is required and must be a non-empty string');
   } else if (!config.serverUrl.startsWith('http://') && !config.serverUrl.startsWith('https://')) {
     errors.push(`Invalid webhook URL format: ${config.serverUrl}. Must start with http:// or https://`);
+  } else if (config.serverUrl.includes('localhost') && !config.serverUrl.startsWith('https://')) {
+    errors.push(`Localhost webhook URL must use HTTPS tunnel (ngrok). Current: ${config.serverUrl}`);
+  }
+
+  // Analysis configuration validation (NEW STRUCTURE)
+  if (config.analysis) {
+    if (!config.analysis.type || config.analysis.type !== 'output') {
+      errors.push('Analysis type must be set to "output"');
+    }
+    
+    // Validate prompt lengths (1000 character limit)
+    if (config.analysis.summaryPrompt && config.analysis.summaryPrompt.length > 1000) {
+      errors.push(`Summary prompt too long: ${config.analysis.summaryPrompt.length} chars (max 1000)`);
+    }
+    
+    if (config.analysis.successEvaluationPrompt && config.analysis.successEvaluationPrompt.length > 1000) {
+      errors.push(`Success evaluation prompt too long: ${config.analysis.successEvaluationPrompt.length} chars (max 1000)`);
+    }
+    
+    if (config.analysis.structuredDataPrompt && config.analysis.structuredDataPrompt.length > 1000) {
+      errors.push(`Structured data prompt too long: ${config.analysis.structuredDataPrompt.length} chars (max 1000)`);
+    }
   }
 
   // Duration and timeout validation

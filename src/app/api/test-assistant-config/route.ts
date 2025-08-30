@@ -49,14 +49,14 @@ export async function GET(request: NextRequest) {
 
     // Check if analysis fields are present
     const hasAnalysisFields = {
-      hasSummaryPrompt: !!assistantConfig.summaryPrompt,
-      hasSuccessEvaluationPrompt: !!assistantConfig.successEvaluationPrompt,
-      hasStructuredDataPrompt: !!assistantConfig.structuredDataPrompt,
-      hasStructuredDataSchema: !!assistantConfig.structuredDataSchema,
-      summaryPromptLength: assistantConfig.summaryPrompt?.length || 0,
-      successEvaluationPromptLength: assistantConfig.successEvaluationPrompt?.length || 0,
-      structuredDataPromptLength: assistantConfig.structuredDataPrompt?.length || 0,
-      structuredDataSchemaKeys: assistantConfig.structuredDataSchema ? Object.keys(assistantConfig.structuredDataSchema) : []
+      hasSummaryPrompt: !!assistantConfig.analysis?.summaryPrompt,
+      hasSuccessEvaluationPrompt: !!assistantConfig.analysis?.successEvaluationPrompt,
+      hasStructuredDataPrompt: !!assistantConfig.analysis?.structuredDataPrompt,
+      hasStructuredDataSchema: !!assistantConfig.analysis?.structuredDataSchema,
+      summaryPromptLength: assistantConfig.analysis?.summaryPrompt?.length || 0,
+      successEvaluationPromptLength: assistantConfig.analysis?.successEvaluationPrompt?.length || 0,
+      structuredDataPromptLength: assistantConfig.analysis?.structuredDataPrompt?.length || 0,
+      structuredDataSchemaKeys: assistantConfig.analysis?.structuredDataSchema ? Object.keys(assistantConfig.analysis.structuredDataSchema) : []
     }
 
     return NextResponse.json({
@@ -67,11 +67,12 @@ export async function GET(request: NextRequest) {
         name: assistantConfig.name,
         model: assistantConfig.model,
         voice: assistantConfig.voice,
+        analysis: assistantConfig.analysis,
         // Include first 100 chars of each analysis field for verification
-        summaryPromptPreview: assistantConfig.summaryPrompt?.substring(0, 100) + '...',
-        successEvaluationPromptPreview: assistantConfig.successEvaluationPrompt?.substring(0, 100) + '...',
-        structuredDataPromptPreview: assistantConfig.structuredDataPrompt?.substring(0, 100) + '...',
-        structuredDataSchemaPreview: assistantConfig.structuredDataSchema
+        summaryPromptPreview: assistantConfig.analysis?.summaryPrompt?.substring(0, 100) + '...',
+        successEvaluationPromptPreview: assistantConfig.analysis?.successEvaluationPrompt?.substring(0, 100) + '...',
+        structuredDataPromptPreview: assistantConfig.analysis?.structuredDataPrompt?.substring(0, 100) + '...',
+        structuredDataSchemaPreview: assistantConfig.analysis?.structuredDataSchema
       }
     })
 
