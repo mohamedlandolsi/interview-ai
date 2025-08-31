@@ -62,34 +62,53 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('🔍 Profile GET API called')
     const supabase = await createClient()
     
     // Get the current user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
+    console.log('👤 User auth check:', { userId: user?.id, error: authError })
     
     if (authError || !user) {
+      console.log('❌ Unauthorized access to profile API')
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       )
     }
 
+    console.log('📊 Fetching profile for user:', user.id)
     // Get the user's profile
     const profile = await getUserProfile(user.id)
+    console.log('📋 Profile fetched from database:', {
+      id: profile?.id,
+      avatar_url: profile?.avatar_url,
+      updated_at: profile?.updated_at,
+      full_name: profile?.full_name
+    })
     
     if (!profile) {
+      console.log('❌ Profile not found for user:', user.id)
       return NextResponse.json(
         { error: 'Profile not found', exists: false },
         { status: 404 }
       )
     }
 
+    console.log('✅ Returning profile data with avatar URL:', profile.avatar_url)
     return NextResponse.json(
       { profile, exists: true },
-      { status: 200 }
+      { 
+        status: 200,
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        }
+      }
     )
   } catch (error) {
-    console.error('Error fetching profile:', error)
+    console.error('💥 Error fetching profile:', error)
     return NextResponse.json(
       { error: 'Failed to fetch profile' },
       { status: 500 }

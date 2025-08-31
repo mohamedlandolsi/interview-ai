@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { 
   Dialog,
@@ -86,12 +87,14 @@ export function ProfileSettings() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
+  const [profileRefreshing, setProfileRefreshing] = useState(false)
   const [profileSaving, setProfileSaving] = useState(false)
   const [passwordChanging, setPasswordChanging] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [avatarRefreshKey, setAvatarRefreshKey] = useState(0) // Force avatar refresh
+  const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState<string | null>(null) // Store uploaded URL temporarily
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Initialize forms
@@ -156,23 +159,53 @@ export function ProfileSettings() {
       const formData = new FormData()
       formData.append('avatar', avatarFile)
 
+      console.log('Starting avatar upload...')
       const response = await fetch('/api/profile/avatar', {
         method: 'POST',
         body: formData,
       })
 
       const result = await response.json()
+      console.log('Upload response:', { status: response.status, result })
 
       if (response.ok) {
+        console.log('✅ Avatar upload successful! Response:', result)
+        
+        // The server now returns a cache-busted URL - use it immediately
+        if (result.avatar_url) {
+          console.log('🔄 Received cache-busted avatar URL:', result.avatar_url)
+          setUploadedAvatarUrl(result.avatar_url)
+          
+          // Also log the cache-busting details for debugging
+          if (result.cache_busted) {
+            console.log('💾 Cache-busting applied with timestamp:', result.timestamp)
+          }
+        }
+        
         toast.success('Avatar updated successfully')
-        // Force a hard refresh of the profile data
+        
+        // Force a complete profile refresh to sync with database
+        console.log('🔄 Refreshing profile data...')
+        setProfileRefreshing(true)
         await refreshProfile()
-        // Clear the preview and file state
+        setProfileRefreshing(false)
+        console.log('✅ Profile refresh completed')
+        
+        // Clear the file selection and preview
         setAvatarFile(null)
         setAvatarPreview(null)
-        // Force avatar refresh by updating key
+        
+        // Increment refresh key for additional cache busting on the frontend
         setAvatarRefreshKey(prev => prev + 1)
+        
+        // Clear the temporary URL after ensuring the profile has updated
+        setTimeout(() => {
+          setUploadedAvatarUrl(null)
+          console.log('🧹 Cleared temporary avatar URL - now using profile data')
+        }, 1500)
+        
       } else {
+        console.error('Upload failed:', result)
         toast.error(result.error || 'Failed to upload avatar')
       }
     } catch (error) {
@@ -305,15 +338,49 @@ export function ProfileSettings() {
     }
   }
 
-  // Get avatar URL for display
+  // Get avatar URL for display with robust cache-busting
   const getAvatarUrl = () => {
-    if (avatarPreview) return avatarPreview
-    // Add cache busting parameter to force reload
-    const baseUrl = profile?.avatar_url || ''
-    if (baseUrl && !baseUrl.includes('?')) {
-      return `${baseUrl}?v=${avatarRefreshKey}&t=${new Date().getTime()}`
+    console.log('🖼️ getAvatarUrl called:', {
+      avatarPreview: avatarPreview ? 'present' : 'null',
+      uploadedAvatarUrl: uploadedAvatarUrl ? 'present' : 'null',
+      profile_avatar_url: profile?.avatar_url ? 'present' : 'null',
+      avatarRefreshKey
+    })
+    
+    // Priority 1: File preview (when user selects a new file)
+    if (avatarPreview) {
+      console.log('📷 Using avatar preview')
+      return avatarPreview
     }
-    return baseUrl
+    
+    // Priority 2: Cache-busted uploaded avatar URL (immediately after upload)
+    // This URL already contains cache-busting timestamp from the server
+    if (uploadedAvatarUrl) {
+      console.log('⚡ Using cache-busted uploaded avatar URL:', uploadedAvatarUrl)
+      return uploadedAvatarUrl
+    }
+    
+    // Priority 3: Profile avatar URL from database 
+    if (profile?.avatar_url) {
+      const baseUrl = profile.avatar_url
+      
+      // Check if the URL already has cache-busting (from server)
+      if (baseUrl.includes('?t=')) {
+        console.log('💾 Using server cache-busted profile avatar URL')
+        return baseUrl
+      }
+      
+      // Add frontend cache busting as fallback for older URLs
+      const cachedUrl = baseUrl.includes('?') 
+        ? `${baseUrl}&v=${avatarRefreshKey}&t=${Date.now()}`
+        : `${baseUrl}?v=${avatarRefreshKey}&t=${Date.now()}`
+      console.log('� Adding frontend cache-busting to profile avatar URL')
+      return cachedUrl
+    }
+    
+    // No avatar URL available - will fallback to AvatarFallback
+    console.log('🚫 No avatar URL available, using fallback')
+    return undefined
   }
 
   // Get initials for avatar fallback
@@ -347,12 +414,22 @@ export function ProfileSettings() {
           {/* Avatar Section */}
           <div className="flex items-center gap-6">
             <div className="relative">
-              <Avatar className="h-20 w-20" key={`avatar-${avatarRefreshKey}`}>
-                <AvatarImage src={getAvatarUrl()} alt="Profile picture" />
-                <AvatarFallback className="text-lg">
-                  {getInitials()}
-                </AvatarFallback>
-              </Avatar>
+              {avatarUploading ? (
+                /* Loading state with skeleton */
+                <div className="h-20 w-20 rounded-full relative">
+                  <Skeleton className="h-20 w-20 rounded-full" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                </div>
+              ) : (
+                <Avatar className="h-20 w-20" key={`avatar-${avatarRefreshKey}`}>
+                  <AvatarImage src={getAvatarUrl()} alt="Profile picture" />
+                  <AvatarFallback className="text-lg">
+                    {getInitials()}
+                  </AvatarFallback>
+                </Avatar>
+              )}
               <Button
                 type="button"
                 size="sm"
@@ -361,7 +438,11 @@ export function ProfileSettings() {
                 onClick={() => fileInputRef.current?.click()}
                 disabled={avatarUploading}
               >
-                <Camera className="h-4 w-4" />
+                {avatarUploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Camera className="h-4 w-4" />
+                )}
               </Button>
               <input
                 ref={fileInputRef}
@@ -384,24 +465,41 @@ export function ProfileSettings() {
               </div>
               <div className="flex gap-2">
                 {avatarFile && (
-                  <Button
-                    size="sm"
-                    onClick={handleAvatarUpload}
-                    disabled={avatarUploading}
-                  >
-                    {avatarUploading ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <Upload className="h-4 w-4 mr-2" />
-                    )}
-                    Upload
-                  </Button>
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={handleAvatarUpload}
+                      disabled={avatarUploading}
+                    >
+                      {avatarUploading ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                      )}
+                      {avatarUploading ? 'Uploading...' : 'Upload'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setAvatarFile(null)
+                        setAvatarPreview(null)
+                        if (fileInputRef.current) {
+                          fileInputRef.current.value = ''
+                        }
+                      }}
+                      disabled={avatarUploading}
+                    >
+                      Cancel
+                    </Button>
+                  </>
                 )}
-                {profile?.avatar_url && (
+                {profile?.avatar_url && !avatarFile && (
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={handleAvatarDelete}
+                    disabled={avatarUploading}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
                     Remove

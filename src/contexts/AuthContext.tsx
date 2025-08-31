@@ -93,9 +93,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setProfileLoading(true)
       
+      console.log('🔍 AuthContext: Fetching profile for user:', userId)
+      
       // Use our Prisma-based API route to fetch profile
       // Add cache busting to ensure fresh data
-      const response = await fetch(`/api/profile?t=${new Date().getTime()}`, {
+      const cacheBuster = new Date().getTime()
+      const response = await fetch(`/api/profile?t=${cacheBuster}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -103,8 +106,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         },
       })
 
+      console.log('📡 AuthContext: Profile API response status:', response.status)
+
       if (!response.ok) {
         if (response.status === 404) {
+          console.log('👤 AuthContext: Profile not found (404)')
           // Profile doesn't exist yet
           return null
         }
@@ -112,10 +118,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       const data = await response.json()
-      return data.profile || null
+      const profileData = data.profile || null
+      
+      console.log('📊 AuthContext: Profile data received:', {
+        id: profileData?.id,
+        avatar_url: profileData?.avatar_url,
+        updated_at: profileData?.updated_at,
+        cacheBuster
+      })
+      
+      return profileData
       
     } catch (error) {
-      console.error('Error fetching profile:', {
+      console.error('💥 AuthContext: Error fetching profile:', {
         error,
         userId,
         errorMessage: error instanceof Error ? error.message : 'Unknown error'
@@ -192,11 +207,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Refresh profile data
   const refreshProfile = async () => {
+    console.log('🔄 AuthContext: Starting profile refresh for user:', user?.id)
     if (user?.id) {
       const profileData = await fetchProfile(user.id)
+      console.log('📋 AuthContext: Fetched profile data:', { 
+        id: profileData?.id, 
+        avatar_url: profileData?.avatar_url,
+        updated_at: profileData?.updated_at 
+      })
       setProfile(profileData)
+      console.log('✅ AuthContext: Profile state updated')
+      
       // Also fetch company data
       await fetchCompany()
+    } else {
+      console.log('❌ AuthContext: No user ID available for profile refresh')
     }
   }
 

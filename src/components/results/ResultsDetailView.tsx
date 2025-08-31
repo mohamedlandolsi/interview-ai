@@ -244,7 +244,35 @@ export function ResultsDetailView({ result }: ResultsDetailViewProps) {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <TranscriptViewer transcript={mockTranscript} />
+              {result.finalTranscript ? (
+                <div className="space-y-4">
+                  <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg border">
+                    <pre className="whitespace-pre-wrap text-sm font-mono leading-relaxed">
+                      {result.finalTranscript}
+                    </pre>
+                  </div>
+                  
+                  {result.recordingUrl && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Clock className="h-4 w-4" />
+                      <span>Recording available</span>
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={result.recordingUrl} target="_blank" rel="noopener noreferrer">
+                          Listen to Recording
+                        </a>
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">No transcript available for this interview</p>
+                  <p className="text-sm text-gray-400 mt-2">
+                    The interview may still be in progress or the transcript is being processed
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -254,21 +282,25 @@ export function ResultsDetailView({ result }: ResultsDetailViewProps) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Brain className="h-5 w-5" />
-                AI-Powered Analysis
+                AI-Powered Analysis (Gemini 2.5 Flash)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Strengths */}
               <div>
                 <h3 className="text-lg font-semibold text-green-800 dark:text-green-400 mb-3">Strengths</h3>
-                <ul className="space-y-2">
-                  {mockDetailedAnalysis.strengths.map((strength, index) => (
-                    <li key={index} className="flex items-start gap-3">
-                      <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
-                      <span className="text-sm">{strength}</span>
-                    </li>
-                  ))}
-                </ul>
+                {result.strengths && result.strengths.length > 0 ? (
+                  <ul className="space-y-2">
+                    {result.strengths.map((strength: string, index: number) => (
+                      <li key={index} className="flex items-start gap-3">
+                        <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
+                        <span className="text-sm">{strength}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-gray-500">No strengths analysis available yet</p>
+                )}
               </div>
 
               <Separator />
@@ -276,37 +308,74 @@ export function ResultsDetailView({ result }: ResultsDetailViewProps) {
               {/* Areas for Improvement */}
               <div>
                 <h3 className="text-lg font-semibold text-orange-800 mb-3">Areas for Improvement</h3>
-                <ul className="space-y-2">
-                  {mockDetailedAnalysis.areasForImprovement.map((area, index) => (
-                    <li key={index} className="flex items-start gap-3">
-                      <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0"></div>
-                      <span className="text-sm">{area}</span>
-                    </li>
-                  ))}
-                </ul>
+                {result.areasForImprovement && result.areasForImprovement.length > 0 ? (
+                  <ul className="space-y-2">
+                    {result.areasForImprovement.map((area: string, index: number) => (
+                      <li key={index} className="flex items-start gap-3">
+                        <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0"></div>
+                        <span className="text-sm">{area}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-gray-500">No improvement areas analysis available yet</p>
+                )}
               </div>
 
               <Separator />
 
-              {/* Recommendations */}
-              <div>
-                <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-400 mb-3">Recommendations</h3>
-                <ul className="space-y-2">
-                  {mockDetailedAnalysis.recommendations.map((rec, index) => (
-                    <li key={index} className="flex items-start gap-3">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
-                      <span className="text-sm">{rec}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {/* Key Insights */}
+              {result.keyInsights && result.keyInsights.length > 0 && (
+                <>
+                  <div>
+                    <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-400 mb-3">Key Insights</h3>
+                    <ul className="space-y-2">
+                      {result.keyInsights.map((insight: string, index: number) => (
+                        <li key={index} className="flex items-start gap-3">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                          <span className="text-sm">{insight}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
 
-              <Separator />
+                  <Separator />
+                </>
+              )}
 
-              {/* Overall Assessment */}              <div className="bg-muted/50 p-4 rounded-lg border">
+              {/* Overall Assessment */}
+              <div className="bg-muted/50 p-4 rounded-lg border">
                 <h3 className="text-lg font-semibold mb-3">Overall Assessment</h3>
-                <p className="text-sm leading-relaxed">{mockDetailedAnalysis.overallAssessment}</p>
+                {result.analysisFeedback ? (
+                  <p className="text-sm leading-relaxed">{result.analysisFeedback}</p>
+                ) : (
+                  <p className="text-sm text-gray-500">No overall assessment available yet</p>
+                )}
               </div>
+
+              {/* Hiring Recommendation */}
+              {result.hiringRecommendation && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <h3 className="text-lg font-semibold mb-3">Hiring Recommendation</h3>
+                  <div className="flex items-center gap-4">
+                    <Badge 
+                      variant={
+                        result.hiringRecommendation === 'Strong Hire' || result.hiringRecommendation === 'Hire' 
+                          ? 'default' 
+                          : result.hiringRecommendation === 'Maybe' 
+                          ? 'secondary' 
+                          : 'destructive'
+                      }
+                      className="text-lg px-4 py-2"
+                    >
+                      {result.hiringRecommendation}
+                    </Badge>
+                    <span className="text-sm text-gray-600">
+                      Recommendation based on comprehensive AI analysis
+                    </span>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

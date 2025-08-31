@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
@@ -60,8 +61,14 @@ export async function POST(request: NextRequest) {
     const fileBuffer = await file.arrayBuffer()
     console.log('File converted to buffer, size:', fileBuffer.byteLength)
 
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    // Create service client with service role key to bypass RLS
+    const serviceSupabase = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+
+    // Upload to Supabase Storage using service role client
+    const { data: uploadData, error: uploadError } = await serviceSupabase.storage
       .from('avatars')
       .upload(filePath, fileBuffer, {
         contentType: file.type,
@@ -79,17 +86,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the public URL for the uploaded file
-    // For public buckets, we can get the public URL directly
+    // Using the regular client for public URL generation (this doesn't require RLS)
     const { data: urlData } = supabase.storage
       .from('avatars')
       .getPublicUrl(filePath)
 
     console.log('Generated URL data:', urlData)
-
-    // For private buckets, we would need a signed URL instead:
-    // const { data: urlData, error: urlError } = await supabase.storage
-    //   .from('avatars')
-    //   .createSignedUrl(filePath, 60 * 60 * 24 * 365) // 1 year expiry
 
     if (!urlData.publicUrl) {
       console.log('Failed to generate public URL')
@@ -99,21 +101,43 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update the user's profile with the new avatar URL
+    // --- CRITICAL CACHE-BUSTING FIX ---
+    // Append a timestamp as a query parameter to bust the browser cache
+    // This ensures the browser fetches the new image immediately
+    const cacheBustedUrl = `${urlData.publicUrl}?t=${new Date().getTime()}`
+    console.log('🔄 Cache-busted URL created:', cacheBustedUrl)
+
+    // Update the user's profile with the cache-busted avatar URL
+    console.log('💾 Updating profile in database with cache-busted avatar URL:', cacheBustedUrl)
+    console.log('👤 User ID:', user.id)
+    
     const updatedProfile = await prisma.profile.update({
       where: { id: user.id },
       data: { 
-        avatar_url: urlData.publicUrl,
+        avatar_url: cacheBustedUrl,
         updated_at: new Date()
       }
     })
 
-    console.log('Profile updated successfully:', { avatar_url: urlData.publicUrl })
+    console.log('✅ Profile updated successfully in database:')
+    console.log('   - User ID:', updatedProfile.id)
+    console.log('   - Avatar URL:', updatedProfile.avatar_url)
+    console.log('   - Updated at:', updatedProfile.updated_at)
+
+    // Verify the update by reading it back
+    const verifyProfile = await prisma.profile.findUnique({
+      where: { id: user.id },
+      select: { id: true, avatar_url: true, updated_at: true }
+    })
+    console.log('🔍 Verification read from database:', verifyProfile)
 
     return NextResponse.json({
       message: 'Avatar uploaded successfully',
-      avatar_url: urlData.publicUrl,
-      profile: updatedProfile
+      avatar_url: cacheBustedUrl,
+      profile: updatedProfile,
+      verification: verifyProfile,
+      cache_busted: true,
+      timestamp: new Date().getTime()
     })
 
   } catch (error) {
@@ -139,8 +163,14 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    // Create service client with service role key to bypass RLS
+    const serviceSupabase = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+
     // List files in user's folder to find avatar
-    const { data: files, error: listError } = await supabase.storage
+    const { data: files, error: listError } = await serviceSupabase.storage
       .from('avatars')
       .list(user.id)
 
@@ -156,8 +186,8 @@ export async function DELETE(request: NextRequest) {
     const avatarFile = files?.find(file => file.name.startsWith('avatar.'))
     
     if (avatarFile) {
-      // Delete the file
-      const { error: deleteError } = await supabase.storage
+      // Delete the file using service client
+      const { error: deleteError } = await serviceSupabase.storage
         .from('avatars')
         .remove([`${user.id}/${avatarFile.name}`])
 

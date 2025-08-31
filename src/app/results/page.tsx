@@ -59,6 +59,7 @@ export default function ResultsPage() {
   const [dateFilter, setDateFilter] = useState('all')
   const [selectedResult, setSelectedResult] = useState<any>(null)
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
+  const [generatingDemo, setGeneratingDemo] = useState(false)
   
   // Pagination state
   const [pagination, setPagination] = useState({
@@ -121,6 +122,43 @@ export default function ResultsPage() {
     }, 500)
     return () => clearTimeout(timeoutId)
   }, [searchTerm, positionFilter, scoreFilter])
+
+  // Generate demo analysis for empty results
+  const generateDemoAnalysis = async () => {
+    setGeneratingDemo(true)
+    try {
+      const response = await fetch('/api/interviews/generate-demo-analysis/bulk', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          limit: 10
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate demo analysis')
+      }
+
+      const data = await response.json()
+      
+      if (data.success) {
+        // Refresh the results after generating demo data
+        await fetchResults(1)
+        
+        // Show success message
+        console.log(`✅ Demo analysis generated: ${data.successCount} successful, ${data.errorCount} errors`)
+      } else {
+        throw new Error(data.error || 'Failed to generate demo analysis')
+      }
+    } catch (err) {
+      console.error('Error generating demo analysis:', err)
+      setError(err instanceof Error ? err.message : 'Failed to generate demo analysis')
+    } finally {
+      setGeneratingDemo(false)
+    }
+  }
 
   // Client-side date filtering (since it's complex to do server-side)
   const filteredResults = useMemo(() => {
@@ -215,10 +253,35 @@ export default function ResultsPage() {
       <DashboardLayout>
         <div className="p-6">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Interview Results</h1>
-            <p className="text-gray-600">
-              View and analyze results from all interview sessions
-            </p>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h1 className="text-3xl font-bold mb-2">Interview Results</h1>
+                <p className="text-gray-600">
+                  View and analyze results from all interview sessions
+                </p>
+              </div>
+              
+              <div className="flex space-x-2">
+                <Button
+                  onClick={generateDemoAnalysis}
+                  disabled={generatingDemo}
+                  variant="outline"
+                  size="sm"
+                >
+                  {generatingDemo ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Star className="w-4 h-4 mr-2" />
+                      Generate Demo Analysis
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
 
           {/* Analytics Dashboard */}
@@ -372,15 +435,43 @@ export default function ResultsPage() {
             <Card>
               <CardContent className="text-center py-12">
                 <p className="text-gray-500 mb-4">No interview results found</p>
-                <p className="text-sm text-gray-400">
+                <p className="text-sm text-gray-400 mb-6">
                   {interviewResults.length === 0
                      ? "No interviews have been conducted yet."
                      : "Try adjusting your search or filter criteria."}
                 </p>
+                
                 {interviewResults.length === 0 && (
-                  <Button className="mt-4" onClick={() => window.location.href = '/interviews'}>
-                    Conduct Interview
-                  </Button>
+                  <div className="space-y-4">
+                    <Button 
+                      onClick={generateDemoAnalysis}
+                      disabled={generatingDemo}
+                      className="mr-4"
+                    >
+                      {generatingDemo ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Generating Demo Analysis...
+                        </>
+                      ) : (
+                        <>
+                          <Star className="w-4 h-4 mr-2" />
+                          Generate Demo Analysis with AI
+                        </>
+                      )}
+                    </Button>
+                    <span className="text-xs text-gray-400 block">
+                      This will create realistic interview analysis using Gemini 2.5 Flash for demonstration
+                    </span>
+                    
+                    <Button 
+                      variant="outline" 
+                      onClick={() => window.location.href = '/interviews'}
+                      className="mt-2"
+                    >
+                      Conduct Real Interview
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>

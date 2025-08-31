@@ -414,7 +414,7 @@ REQUIREMENTS:
 Generate only the question text, nothing else:
       `.trim()
 
-      const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+      const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
       
       const result = await model.generateContent(prompt)
       const response = result.response

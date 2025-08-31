@@ -288,7 +288,7 @@ export class InterviewAnalysisService {
 
       const prompt = this.constructAnalysisPrompt(sessionData)
       const model = this.genAI.getGenerativeModel({ 
-        model: 'gemini-2.5-pro',
+        model: 'gemini-2.5-flash',
         generationConfig: {
           temperature: 0.3, // Lower temperature for more consistent analysis
           maxOutputTokens: 8192

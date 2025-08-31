@@ -40,6 +40,7 @@ export async function createUserProfile(
  */
 export async function getUserProfile(userId: string): Promise<Profile | null> {
   try {
+    console.log('🗃️ Database: Querying profile for user:', userId)
     const profile = await prisma.profile.findUnique({
       where: { id: userId },
       include: {
@@ -54,9 +55,18 @@ export async function getUserProfile(userId: string): Promise<Profile | null> {
       }
     })
     
+    console.log('🗃️ Database: Profile query result:', {
+      found: !!profile,
+      id: profile?.id,
+      avatar_url: profile?.avatar_url,
+      updated_at: profile?.updated_at,
+      templatesCount: profile?.interview_templates?.length,
+      sessionsCount: profile?.interview_sessions?.length
+    })
+    
     return profile
   } catch (error) {
-    console.error(`❌ Error fetching profile for user ${userId}:`, error)
+    console.error(`💥 Database: Error fetching profile for user ${userId}:`, error)
     return null
   }
 }
