@@ -59,6 +59,25 @@ export const useVapi = (): UseVapiReturn => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const sessionIdRef = useRef<string | null>(null);
 
+  // Utility to convert unknown error-like values into a safe string for UI
+  const normalizeError = (err: unknown, fallback = 'Unexpected error'): string => {
+    if (!err) return fallback;
+    if (typeof err === 'string') return err;
+    if (err instanceof Error) return err.message || fallback;
+    if (typeof err === 'object') {
+      const anyErr: any = err;
+      if (typeof anyErr.message === 'string') return anyErr.message;
+      if (typeof anyErr.error === 'string') return anyErr.error;
+      if (typeof anyErr.msg === 'string') return anyErr.msg;
+      if (typeof anyErr.statusCode !== 'undefined') {
+        const body = typeof anyErr.body === 'string' ? anyErr.body : '';
+        return `Error ${anyErr.statusCode}${body ? `: ${body}` : ''}`;
+      }
+      try { return JSON.stringify(anyErr); } catch { return fallback; }
+    }
+    return fallback;
+  };
+
   const [callState, setCallState] = useState<CallState>({
     status: 'idle',
     isActive: false,
@@ -137,7 +156,7 @@ export const useVapi = (): UseVapiReturn => {
           clearInterval(intervalRef.current);
           intervalRef.current = null;
         }
-      });      vapiRef.current.on('error', (error: any) => {
+  });      vapiRef.current.on('error', (error: any) => {
         errorLogger.error('Vapi', 'Vapi error occurred', {
           error,
           errorType: typeof error,
@@ -189,7 +208,7 @@ export const useVapi = (): UseVapiReturn => {
           ...prev,
           status: 'error',
           isActive: false,
-          error: errorMessage
+          error: normalizeError(error, errorMessage)
         }));
         
         // Clear duration timer
@@ -280,18 +299,44 @@ export const useVapi = (): UseVapiReturn => {
         ...prev,
         status: 'connecting',
         error: undefined
-      }));      await vapiRef.current.start(assistantToUse);
+      }));
+      
+      try {
+        await vapiRef.current.start(assistantToUse);
+      } catch (vapiError: any) {
+        // Handle Vapi-specific errors which might be objects
+        let vapiErrorMessage = 'Failed to start Vapi call';
+        if (vapiError && typeof vapiError === 'object') {
+          if (vapiError.message) {
+            vapiErrorMessage = vapiError.message;
+          } else if (vapiError.error) {
+            vapiErrorMessage = vapiError.error;
+          } else if (vapiError.statusCode && vapiError.body) {
+            vapiErrorMessage = `Error ${vapiError.statusCode}: ${vapiError.body}`;
+          } else {
+            vapiErrorMessage = JSON.stringify(vapiError);
+          }
+        } else if (typeof vapiError === 'string') {
+          vapiErrorMessage = vapiError;
+        }
+        
+        console.error('Vapi call start failed:', vapiErrorMessage, vapiError);
+        throw new Error(vapiErrorMessage);
+      }
     } catch (error: any) {
-      console.error('Failed to start call:', error);
+      const msg = normalizeError(error, 'Failed to start interview call');
+      console.error('Failed to start call:', msg, error);
       setCallState(prev => ({
         ...prev,
         status: 'error',
-        error: error.message || 'Failed to start interview call'
+        error: msg
       }));
     }
-  }, [volume]);  const startInterviewCall = useCallback(async (
-    candidateName: string, 
-    position: string, 
+  }, [volume]);
+
+  const startInterviewCall = useCallback(async (
+    candidateName: string,
+    position: string,
     templateQuestions?: string[],
     templateInstruction?: string
   ) => {
@@ -552,36 +597,36 @@ Begin the interview now with a greeting.`;
       }
       
       console.log('✅ Configuration validation passed');
-      await vapiRef.current.start(assistantConfig);
-    } catch (error: any) {
-      console.error('Failed to start interview call - detailed error:', {
-        error,
-        errorType: typeof error,
-        errorMessage: error?.message,
-        errorCode: error?.code,
-        errorData: error?.data,
-        errorString: String(error),
-        errorStack: error?.stack,
-        fullError: JSON.stringify(error, null, 2)
-      });
       
-      let errorMessage = 'Failed to start interview call';
-      if (error) {
-        if (typeof error === 'string') {
-          errorMessage = error;
-        } else if (error.message) {
-          errorMessage = error.message;
-        } else if (error.error) {
-          errorMessage = error.error;
-        } else if (error.code) {
-          errorMessage = `Error code: ${error.code}`;
+      try {
+        await vapiRef.current.start(assistantConfig);
+      } catch (vapiError: any) {
+        // Handle Vapi-specific errors which might be objects
+        let vapiErrorMessage = 'Failed to start Vapi call';
+        if (vapiError && typeof vapiError === 'object') {
+          if (vapiError.message) {
+            vapiErrorMessage = vapiError.message;
+          } else if (vapiError.error) {
+            vapiErrorMessage = vapiError.error;
+          } else if (vapiError.statusCode && vapiError.body) {
+            vapiErrorMessage = `Error ${vapiError.statusCode}: ${vapiError.body}`;
+          } else {
+            vapiErrorMessage = JSON.stringify(vapiError);
+          }
+        } else if (typeof vapiError === 'string') {
+          vapiErrorMessage = vapiError;
         }
+        
+        console.error('Vapi call start failed:', vapiErrorMessage, vapiError);
+        throw new Error(vapiErrorMessage);
       }
-      
+    } catch (error: any) {
+      const msg = normalizeError(error, 'Failed to start interview call');
+      console.error('Failed to start interview call - normalized:', msg, error);
       setCallState(prev => ({
         ...prev,
         status: 'error',
-        error: errorMessage
+        error: msg
       }));
     }
   }, [volume]);
@@ -689,23 +734,96 @@ Begin the interview now with a greeting.`;
       sessionIdRef.current = sessionId;
 
       // Start the call with the transient assistant
-      await vapiRef.current.start(startData.assistantId);
-      
-      console.log('📞 Call started with transient assistant');
+      try {
+        await vapiRef.current.start(startData.assistantId);
+        console.log('📞 Call started with transient assistant');
+      } catch (vapiError: any) {
+        // Handle Vapi-specific errors which might be objects
+        let vapiErrorMessage = 'Failed to start Vapi call';
+        if (vapiError && typeof vapiError === 'object') {
+          if (vapiError.message) {
+            vapiErrorMessage = vapiError.message;
+          } else if (vapiError.error) {
+            vapiErrorMessage = vapiError.error;
+          } else if (vapiError.statusCode && vapiError.body) {
+            vapiErrorMessage = `Error ${vapiError.statusCode}: ${vapiError.body}`;
+          } else {
+            vapiErrorMessage = JSON.stringify(vapiError);
+          }
+        } else if (typeof vapiError === 'string') {
+          vapiErrorMessage = vapiError;
+        }
+        
+        console.error('Vapi call start failed:', vapiErrorMessage, vapiError);
+        
+        // Check for specific permission error and provide fallback
+        if (vapiErrorMessage.includes("Key doesn't allow assistantId") || 
+            vapiErrorMessage.includes("assistantId") && vapiErrorMessage.includes("Forbidden")) {
+          console.warn('🔑 Public key permission error detected - key is scoped to specific assistants');
+          console.warn('💡 To fix: Change your Vapi Public Key from "Selected Assistants" to "All Assistants" in Vapi Dashboard');
+          console.warn('🔄 Attempting fallback to inline configuration...');
+          
+          // Fallback: try inline config without assistantId
+          try {
+            const fallbackConfig = {
+              name: `Interview - ${candidateName.split(' ')[0]}`,
+              transcriber: {
+                provider: "deepgram" as const,
+                model: "nova-2" as const,
+                language: "en-US" as const
+              },
+              voice: {
+                provider: "11labs" as const,
+                voiceId: "pNInz6obpgDQGcFmaJgB",
+                stability: 0.6,
+                similarityBoost: 0.9,
+                style: 0.2,
+                useSpeakerBoost: true
+              },
+              model: {
+                provider: "openai" as const,
+                model: "gpt-4o-mini" as const,
+                temperature: 0.1,
+                messages: [{
+                  role: "system" as const,
+                  content: `You are a professional AI interviewer for the position: ${position}. Conduct a comprehensive interview with the candidate ${candidateName}.`
+                }]
+              },
+              firstMessage: `Hello ${candidateName}! I'm your AI interviewer today. I'm excited to learn more about your background and experience for the ${position} position. Let's begin - could you please introduce yourself?`,
+              endCallMessage: "Thank you for your time today. The interview has been completed successfully.",
+              maxDurationSeconds: 3600,
+              silenceTimeoutSeconds: 45,
+              responseDelaySeconds: 1.0,
+              backgroundDenoisingEnabled: true,
+              endCallFunctionEnabled: false,
+            };
+            
+            console.log('🔄 Trying fallback inline config...');
+            await vapiRef.current.start(fallbackConfig);
+            console.log('✅ Fallback successful - interview started with inline config');
+            return; // Success with fallback
+          } catch (fallbackError) {
+            console.error('❌ Fallback also failed:', fallbackError);
+            throw new Error(`Permission error: ${vapiErrorMessage}. Please configure your Vapi Public Key to allow "All Assistants" in the dashboard.`);
+          }
+        }
+        
+        throw new Error(vapiErrorMessage);
+      }
 
     } catch (error: any) {
-      console.error('Error starting interview call:', error);
+      const msg = normalizeError(error, 'Failed to start interview call');
+      console.error('Error starting interview call:', msg, error);
       errorLogger.error('Vapi', 'Failed to start interview call', {
         sessionId,
         candidateName,
         position,
-        error: error.message
-      }, error);
-      
+        error: msg
+      }, error instanceof Error ? error : new Error(msg));
       setCallState(prev => ({
         ...prev,
         status: 'error',
-        error: error.message || 'Failed to start interview call'
+        error: msg
       }));
     }
   }, []);

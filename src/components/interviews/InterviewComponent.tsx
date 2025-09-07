@@ -116,7 +116,18 @@ export const InterviewComponent: React.FC<InterviewComponentProps> = ({
           onError?.(`Template ${templateId} not found`);
         }
       } catch (error) {
-        const errorMessage = `Error fetching template: ${error}`;
+        // Safely extract error message from error object
+        let errorMessage = 'Error fetching template: ';
+        if (error && typeof error === 'object' && 'message' in error) {
+          errorMessage += (error as any).message;
+        } else if (error && typeof error === 'object' && 'error' in error) {
+          errorMessage += (error as any).error;
+        } else if (typeof error === 'string') {
+          errorMessage += error;
+        } else {
+          errorMessage += 'Unknown error occurred';
+        }
+        
         errorLogger.error('InterviewComponent', errorMessage, { error, templateId }, error instanceof Error ? error : new Error(String(error)));
         onError?.(errorMessage);
       } finally {
@@ -266,9 +277,20 @@ export const InterviewComponent: React.FC<InterviewComponentProps> = ({
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              {typeof callState.error === 'string' 
-                ? callState.error 
-                : (callState.error as any)?.message || (callState.error as any)?.msg || 'An error occurred during the interview'}
+              <div className="space-y-2">
+                <div>
+                  {typeof callState.error === 'string' 
+                    ? callState.error 
+                    : (callState.error as any)?.message || (callState.error as any)?.msg || 'An error occurred during the interview'}
+                </div>
+                {(callState.error.includes?.("Key doesn't allow assistantId") || 
+                  (callState.error.includes?.("assistantId") && callState.error.includes?.("Forbidden"))) && (
+                  <div className="text-xs bg-red-100 dark:bg-red-900 p-2 rounded border-l-2 border-red-400">
+                    <strong>Quick Fix:</strong> In your Vapi Dashboard, go to Keys → Edit your Public Key → 
+                    Change "Selected Assistants" to "All Assistants" → Save
+                  </div>
+                )}
+              </div>
             </AlertDescription>
           </Alert>
         )}

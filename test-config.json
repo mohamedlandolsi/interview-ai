@@ -1,0 +1,23 @@
+{
+  "name": "Test Assistant",
+  "model": {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a test assistant."
+      }
+    ]
+  },
+  "voice": {
+    "provider": "11labs",
+    "voiceId": "pNInz6obpgDQGcFmaJgB"
+  },
+  "transcriber": {
+    "provider": "deepgram",
+    "model": "nova-2",
+    "language": "en-US"
+  }
+}

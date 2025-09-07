@@ -116,6 +116,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Verify the assistant was created and is accessible
+    if (!vapiResponse.assistantId) {
+      console.error('Assistant creation succeeded but no ID returned');
+      return NextResponse.json(
+        { error: 'Assistant creation succeeded but no ID returned' },
+        { status: 500 }
+      );
+    }
+
     // Update the session with the new assistant ID
     await prisma.interviewSession.update({
       where: { id: interviewSessionId },
@@ -161,9 +170,22 @@ async function createVapiAssistant(config: any): Promise<{ success: boolean; ass
       };
     }
 
-    // Log the exact payload being sent to Vapi for debugging
-    console.log('📤 Sending payload to Vapi API:');
-    console.log(JSON.stringify(config, null, 2));
+    // Simplify the config for testing - remove complex analysis for now
+    const simplifiedConfig = {
+      name: config.name,
+      model: config.model,
+      voice: config.voice,
+      transcriber: config.transcriber,
+      firstMessage: config.firstMessage,
+      endCallMessage: config.endCallMessage,
+      maxDurationSeconds: config.maxDurationSeconds,
+      // Temporarily remove server/webhook and analysis until we confirm basic creation works
+      // server: config.server,
+      // analysisPlan: config.analysisPlan
+    };
+
+    console.log('📤 Sending simplified payload to Vapi API:');
+    console.log(JSON.stringify(simplifiedConfig, null, 2));
 
     const response = await fetch('https://api.vapi.ai/assistant', {
       method: 'POST',
@@ -171,7 +193,7 @@ async function createVapiAssistant(config: any): Promise<{ success: boolean; ass
         'Authorization': `Bearer ${process.env.VAPI_PRIVATE_KEY}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(config)
+      body: JSON.stringify(simplifiedConfig)
     });
 
     console.log('📡 Vapi API response status:', response.status, response.statusText);
@@ -198,11 +220,29 @@ async function createVapiAssistant(config: any): Promise<{ success: boolean; ass
     console.log('✅ Vapi assistant created successfully:', data.id);
     
     if (!data.id) {
-      console.error('Vapi assistant created but no ID returned:', data);
+      console.error('❌ Assistant created but no ID in response:', data);
       return {
         success: false,
-        error: 'Vapi assistant created but no ID returned'
+        error: 'Assistant created but no ID returned'
       };
+    }
+
+    // Verify the assistant is accessible by fetching it back
+    try {
+      const verifyResponse = await fetch(`https://api.vapi.ai/assistant/${data.id}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${process.env.VAPI_PRIVATE_KEY}`,
+        }
+      });
+
+      if (verifyResponse.ok) {
+        console.log('✅ Assistant verification successful');
+      } else {
+        console.warn('⚠️ Warning: Created assistant but cannot verify access');
+      }
+    } catch (verifyError) {
+      console.warn('⚠️ Warning: Assistant created but verification failed:', verifyError);
     }
 
     return {
@@ -211,10 +251,10 @@ async function createVapiAssistant(config: any): Promise<{ success: boolean; ass
     };
 
   } catch (error) {
-    console.error('❌ Error creating Vapi assistant:', error);
+    console.error('❌ Unexpected error creating Vapi assistant:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
     };
   }
 }
