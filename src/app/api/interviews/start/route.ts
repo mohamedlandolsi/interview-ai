@@ -179,7 +179,7 @@ async function createVapiAssistant(config: any): Promise<{ success: boolean; ass
       firstMessage: config.firstMessage,
       endCallMessage: config.endCallMessage,
       maxDurationSeconds: config.maxDurationSeconds,
-      // Temporarily remove server/webhook and analysis until we confirm basic creation works
+      // Temporarily remove server/webhook until we confirm basic creation works
       // server: config.server,
       // analysisPlan: config.analysisPlan
     };

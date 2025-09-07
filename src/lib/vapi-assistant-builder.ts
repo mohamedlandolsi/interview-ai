@@ -108,8 +108,9 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
   // PRODUCTION-READY: Get comprehensive Vapi analysis configuration
   const vapiAnalysisConfig = getVapiAnalysisConfig(candidateName, position, questions);
 
-  // PART 3: ROBUST WEBHOOK URL WITH LOCAL DEVELOPMENT SUPPORT
-  let webhookUrl: string;
+  // PART 3: WEBHOOK URL CONFIGURATION (OPTIONAL FOR BASIC TESTING)
+  let webhookUrl: string | null = null;
+  let shouldIncludeWebhook = true;
 
   // For local development, use a tunnel service like ngrok.
   // 1. Run `ngrok http 3000` in a separate terminal.
@@ -118,12 +119,25 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
   if (process.env.NODE_ENV === 'development' && process.env.VAPI_WEBHOOK_TUNNEL_URL) {
     webhookUrl = `${process.env.VAPI_WEBHOOK_TUNNEL_URL}/api/vapi/webhook?sessionId=${sessionId}`;
     console.log('🔗 Using tunnel URL for local development:', webhookUrl);
+  } else if (process.env.NODE_ENV === 'development') {
+    // Development without tunnel - skip webhook for basic testing
+    console.warn('⚠️  Development Mode: No tunnel configured. Skipping webhook for basic call testing.');
+    console.warn('💡 For full functionality: Set VAPI_WEBHOOK_TUNNEL_URL in .env.local using ngrok.');
+    shouldIncludeWebhook = false;
   } else {
+    // Production environment
     const appBaseUrl = process.env.APP_URL;
     if (!appBaseUrl) {
-      throw new Error("APP_URL environment variable is not set for production.");
+      throw new Error(
+        "APP_URL environment variable is required for production. " +
+        "Set it to your full production domain (e.g., https://your-app.vercel.app) in your deployment environment."
+      );
+    }
+    if (appBaseUrl.includes('localhost')) {
+      console.warn('⚠️  Production Warning: APP_URL contains localhost. This will not work in production.');
     }
     webhookUrl = `${appBaseUrl}/api/vapi/webhook?sessionId=${sessionId}`;
+    console.log('🌐 Using production webhook URL:', webhookUrl);
   }
 
   const config: VapiAssistantConfig = {
@@ -139,13 +153,16 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
     endCallMessage: "Thank you for your time today. We'll be in touch with next steps soon. Have a great day!",
     endCallPhrases: ["goodbye", "end interview", "that concludes our interview", "thank you for your time"],
     maxDurationSeconds: (template.duration || 30) * 60, // Convert minutes to seconds
-    // New server object expected by Vapi
-    server: {
+  };
+
+  // Only include webhook/server and analysis if webhook is available
+  if (shouldIncludeWebhook && webhookUrl) {
+    config.server = {
       url: webhookUrl
-    },
+    };
     
     // Updated analysis using analysisPlan structure
-    analysisPlan: {
+    config.analysisPlan = {
       summaryPlan: {
         enabled: true,
         messages: [{ role: 'system', content: vapiAnalysisConfig.summaryPrompt }],
@@ -163,8 +180,11 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
         schema: vapiAnalysisConfig.structuredDataSchema,
         timeoutSeconds: 30
       }
-    }
-  };
+    };
+    console.log('✅ Including webhook and analysis in assistant config');
+  } else {
+    console.log('⚠️  Basic mode: Webhook and analysis disabled for testing');
+  }
 
   // PRODUCTION-READY: Final validation before returning config
   const validation = validateAssistantConfig(config);
@@ -493,15 +513,19 @@ export function validateAssistantConfig(config: VapiAssistantConfig): { isValid:
     }
   }
 
-  // Webhook server object validation (CRITICAL for Vapi functionality)
-  if (!config.server || typeof config.server.url !== 'string' || config.server.url.trim().length === 0) {
-    errors.push('Server.url for webhooks is required and must be a non-empty string');
-  } else if (!config.server.url.startsWith('http://') && !config.server.url.startsWith('https://')) {
-    errors.push(`Invalid webhook URL format: ${config.server.url}. Must start with http:// or https://`);
-  } else if (config.server.url.includes('localhost') && !config.server.url.startsWith('https://')) {
-    // For development, warn but don't fail validation
-    console.warn(`⚠️  Development Warning: Localhost webhook URL should use HTTPS tunnel (ngrok) for actual Vapi testing. Current: ${config.server.url}`);
-    console.warn(`⚠️  To test with Vapi: 1) Run 'ngrok http 3000', 2) Set VAPI_WEBHOOK_TUNNEL_URL in .env.local`);
+  // Webhook server object validation (OPTIONAL for basic testing)
+  if (config.server) {
+    if (typeof config.server.url !== 'string' || config.server.url.trim().length === 0) {
+      errors.push('Server.url for webhooks must be a non-empty string when server is provided');
+    } else if (!config.server.url.startsWith('http://') && !config.server.url.startsWith('https://')) {
+      errors.push(`Invalid webhook URL format: ${config.server.url}. Must start with http:// or https://`);
+    } else if (config.server.url.includes('localhost') && !config.server.url.startsWith('https://')) {
+      // For development, warn but don't fail validation
+      console.warn(`⚠️  Development Warning: Localhost webhook URL should use HTTPS tunnel (ngrok) for actual Vapi testing. Current: ${config.server.url}`);
+      console.warn(`⚠️  To test with Vapi: 1) Run 'ngrok http 3000', 2) Set VAPI_WEBHOOK_TUNNEL_URL in .env.local`);
+    }
+  } else {
+    console.warn('⚠️  No webhook URL configured - running in basic mode without real-time analysis');
   }
 
   // AnalysisPlan configuration validation (updated)
