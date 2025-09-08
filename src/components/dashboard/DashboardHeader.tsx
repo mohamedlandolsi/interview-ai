@@ -1,6 +1,6 @@
 "use client"
 
-import { Settings, LogOut, User, Menu } from "lucide-react"
+import { Settings, LogOut, Menu } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
@@ -132,12 +132,6 @@ export function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href="/settings" className="cursor-pointer">
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profile Settings</span>
-                </Link>
-              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/settings" className="cursor-pointer">
                   <Settings className="mr-2 h-4 w-4" />

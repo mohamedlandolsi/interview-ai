@@ -250,6 +250,7 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
   const [position, setPosition] = useState("")
   const [duration, setDuration] = useState("")
   const [description, setDescription] = useState("")
+  const [isCopied, setIsCopied] = useState(false)
 
   useEffect(() => {
     if (isOpen && templateId) {
@@ -326,7 +327,13 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(generatedLink)
+      setIsCopied(true)
       console.log("Copied! Interview link copied to clipboard.")
+      
+      // Reset the checkmark after 2 seconds
+      setTimeout(() => {
+        setIsCopied(false)
+      }, 2000)
     } catch (error) {
       console.error("Error: Failed to copy link. Please copy manually.")
     }
@@ -397,9 +404,16 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
                   <Button 
                     variant="outline"
                     onClick={copyToClipboard}
-                    className="px-3"
+                    className={`px-3 transition-colors duration-200 ${
+                      isCopied ? 'bg-green-50 border-green-200 text-green-700' : ''
+                    }`}
+                    disabled={isCopied}
                   >
-                    <Copy className="w-4 h-4" />
+                    {isCopied ? (
+                      <CheckCircle className="w-4 h-4" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
               </div>
@@ -419,6 +433,7 @@ const LinkGenerationDialog = ({ isOpen, onClose, templateId }: {
                   setGeneratedLink("")
                   setPosition("")
                   setDescription("")
+                  setIsCopied(false)
                 }}>
                   Generate New Link
                 </Button>
