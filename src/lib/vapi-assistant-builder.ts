@@ -140,6 +140,9 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
     console.log('🌐 Using production webhook URL:', webhookUrl);
   }
 
+  // Define grace period for AI to conclude gracefully
+  const GRACE_PERIOD_SECONDS = 30;
+
   const config: VapiAssistantConfig = {
     name: `Interview: ${candidateName} - ${position}`.substring(0, 40),
     model: modelConfig,
@@ -150,9 +153,15 @@ export function buildAssistantFromTemplate(options: BuildAssistantOptions): Vapi
       language: companyIntegration?.vapiLanguage || "en-US"
     },
     firstMessage: buildFirstMessage(candidateName, position, template),
-    endCallMessage: "Thank you for your time today. We'll be in touch with next steps soon. Have a great day!",
-    endCallPhrases: ["goodbye", "end interview", "that concludes our interview", "thank you for your time"],
-    maxDurationSeconds: (template.duration || 30) * 60, // Convert minutes to seconds
+    
+    // Rewrite the endCallMessage to be safe and not trigger a hang-up
+    endCallMessage: "That's all the questions I have for you. Our team will review our conversation and will be in touch with the next steps. We appreciate you taking the time to speak with us today.",
+    
+    // Ensure endCallPhrases do not overlap with the message above
+    endCallPhrases: ["goodbye", "end interview", "that concludes our interview"],
+    
+    // Add a grace period to the max duration
+    maxDurationSeconds: (template.duration || 30) * 60 + GRACE_PERIOD_SECONDS,
   };
 
   // Only include webhook/server and analysis if webhook is available
@@ -310,7 +319,16 @@ function buildSystemPrompt(
     ? questions.map((q, i) => `${i + 1}. ${q}`).join('\n')
     : 'Ask relevant questions for the position based on best practices';
 
+  const duration = template.duration || 30;
+
   let systemPrompt = `You are an expert AI interviewer conducting a professional job interview for the position: ${position}.
+
+**INTERVIEW TIMING & MANAGEMENT:**
+- This interview is scheduled for ${duration} minutes
+- You MUST manage time effectively and conclude gracefully within the time limit
+- Be mindful of pacing - aim to cover all essential questions within the allocated time
+- Begin wrapping up when you have 30-60 seconds remaining to allow for a proper conclusion
+- NEVER end abruptly - always finish your current sentence and provide a proper closing
 
 **Your Role:**
 - Conduct a structured yet conversational interview
@@ -318,13 +336,23 @@ function buildSystemPrompt(
 - Maintain a professional but friendly tone
 - Keep the candidate engaged and comfortable
 - Gather comprehensive information about their qualifications
+- Respect the ${duration}-minute time limit while allowing for natural conversation flow
 
 **IMPORTANT CONVERSATION FLOW:**
 1. Start with a warm greeting and position overview
 2. When the candidate confirms readiness, begin the substantive interview
 3. DO NOT end the call when they say they're ready - this means START the interview
-4. Continue asking questions until you have covered all important areas
-5. Only end when you have completed a thorough interview
+4. Continue asking questions until you have covered all important areas OR time is running short
+5. Monitor time throughout the interview
+6. Begin concluding when you have 1-2 minutes remaining OR have covered all essential questions
+7. End with a professional closing statement that takes 30-60 seconds to complete
+
+**TIME MANAGEMENT INSTRUCTIONS:**
+- Keep track of interview progress relative to the ${duration}-minute duration
+- If time is running short, prioritize the most important questions
+- Always leave sufficient time for a proper conclusion and candidate questions
+- When approaching the time limit, say something like: "We're nearing the end of our ${duration}-minute interview, so let me wrap up with one final question..."
+- Complete your thoughts and provide a graceful conclusion rather than ending abruptly
 
 **Template: ${template.title}**
 ${template.description ? `**Description:** ${template.description}` : ''}
@@ -337,7 +365,7 @@ ${template.difficulty ? `**Difficulty:** ${template.difficulty}` : ''}`;
   }
 
   // Add questions to cover
-  systemPrompt += `\n\n**QUESTIONS TO COVER:**\n${questionsList}
+  systemPrompt += `\n\n**QUESTIONS TO COVER (within ${duration} minutes):**\n${questionsList}
 
 **Guidelines:**
 - Listen actively and ask relevant follow-ups
@@ -347,10 +375,15 @@ ${template.difficulty ? `**Difficulty:** ${template.difficulty}` : ''}`;
 - Take detailed notes mentally for analysis
 - Adapt questions based on candidate responses
 - NEVER end the call prematurely - conduct a full interview
+- ALWAYS respect the ${duration}-minute time limit
+
+**INTERVIEW CONCLUSION:**
+When the interview time is nearly up or all questions are covered, conclude with:
+"Thank you, [candidate name], for taking the time to interview for the ${position} position. You've provided some great insights today. Our team will review your responses and we'll be in touch within the next few business days with next steps. Is there anything else you'd like to add or any questions about the role before we conclude? Thank you again, and have a wonderful day!"
 
 **Important:** This interview will be analyzed for communication effectiveness, technical competency, cultural fit, and overall candidate suitability.
 
-Remember: When the candidate says they're ready, that's your cue to START the interview, not end it!`;
+Remember: When the candidate says they're ready, that's your cue to START the interview, not end it! Manage your time to complete everything within ${duration} minutes.`;
 
   return systemPrompt;
 }

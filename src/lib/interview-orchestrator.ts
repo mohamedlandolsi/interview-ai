@@ -453,11 +453,12 @@ Generate only the question text, nothing else:
    */
   private static async generateConcludingResponse(session: InterviewSession & { template: InterviewTemplate }): Promise<VapiAssistantResponse> {
     const { template } = session
+    const duration = template.duration || 30
     
     const personalizedClosing = `
 Thank you, ${session.candidate_name}, for taking the time to interview for the ${session.position} position. 
 
-You've provided some great insights today. Our team will review your responses and we'll be in touch within the next few business days with next steps.
+We've completed our ${duration}-minute interview, and you've provided some great insights today. Our team will review your responses and we'll be in touch within the next few business days with next steps.
 
 Is there anything else you'd like to add or any questions you have about the role or our company before we conclude?
 

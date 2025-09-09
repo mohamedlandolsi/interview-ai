@@ -157,6 +157,54 @@ export const useVapi = (): UseVapiReturn => {
           intervalRef.current = null;
         }
   });      vapiRef.current.on('error', (error: any) => {
+        // FIRST: Check if this is a natural end before any logging
+        let isNaturalEnd = false;
+        let hasEjectedType = false;
+        let hasNaturalEndMessage = false;
+        
+        if (error) {
+          const errorStr = String(error).toLowerCase();
+          
+          // Check for ejection-specific errors (both string and object format)
+          hasEjectedType = errorStr.includes('ejected') ||
+                          (error.type === 'ejected') ||
+                          (error.error && error.error.type === 'ejected');
+          
+          hasNaturalEndMessage = errorStr.includes('meeting has ended') ||
+                               (error.msg && String(error.msg).toLowerCase().includes('meeting has ended')) ||
+                               (error.errorMsg && String(error.errorMsg).toLowerCase().includes('meeting has ended')) ||
+                               (error.error && error.error.msg && String(error.error.msg).toLowerCase().includes('meeting has ended'));
+          
+          // Check for natural end-of-interview scenarios - enhanced detection
+          isNaturalEnd = errorStr.includes('meeting has ended') ||
+                        errorStr.includes('call has ended') ||
+                        errorStr.includes('interview has ended') ||
+                        (error.msg && String(error.msg).toLowerCase().includes('meeting has ended')) ||
+                        (error.errorMsg && String(error.errorMsg).toLowerCase().includes('meeting has ended')) ||
+                        (error.error && error.error.msg && String(error.error.msg).toLowerCase().includes('meeting has ended')) ||
+                        (error.action === 'error' && error.errorMsg === 'Meeting has ended') ||
+                        (hasEjectedType && hasNaturalEndMessage); // Ejected type with natural end message
+        }
+        
+        if (isNaturalEnd) {
+          // This is a natural end of interview, not an error - suppress all logging
+          setCallState(prev => ({
+            ...prev,
+            status: 'disconnected',
+            isActive: false,
+            error: undefined
+          }));
+          errorLogger.info('Vapi', 'Interview completed naturally - suppressing error display', {
+            errorType: typeof error,
+            detectedAs: 'natural_end',
+            hasEjectedType,
+            hasNaturalEndMessage,
+            suppressedErrorSummary: error ? `${error.action || 'unknown'}:${error.errorMsg || error.message || 'unknown'}` : 'no error'
+          });
+          return; // Don't treat this as an error - exit early
+        }
+        
+        // Only log as error if it's NOT a natural end
         errorLogger.error('Vapi', 'Vapi error occurred', {
           error,
           errorType: typeof error,
@@ -175,11 +223,8 @@ export const useVapi = (): UseVapiReturn => {
         if (error) {
           const errorStr = String(error).toLowerCase();
           
-          // Check for ejection-specific errors (both string and object format)
-          const isEjected = errorStr.includes('meeting ended due to ejection') || 
-                           errorStr.includes('ejected') ||
-                           (error.type === 'ejected') ||
-                           (error.msg && String(error.msg).toLowerCase().includes('meeting has ended'));
+          // Check for ejection-specific errors (excluding natural ends)
+          const isEjected = hasEjectedType && !hasNaturalEndMessage && !errorStr.includes('meeting ended due to ejection');
           
           if (isEjected) {
             errorMessage = 'The interview session was ended unexpectedly. This may be due to a configuration issue or API key problem. Please check your Vapi settings.';
