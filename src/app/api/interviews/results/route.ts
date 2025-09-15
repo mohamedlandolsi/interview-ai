@@ -31,28 +31,56 @@ export async function GET(request: NextRequest) {
         { error: 'Interview session not found' },
         { status: 404 }
       )
-    }    // Enhanced analysis using the new service
+    }    // Enhanced analysis using the new service (only if no existing analysis data)
     let enhancedAnalysis = null
-    try {
-      enhancedAnalysis = await InterviewAnalysisService.analyzeInterview({
-        vapiSummary: (session as any).vapi_summary,
-        vapiSuccessEvaluation: (session as any).vapi_success_evaluation,
-        vapiStructuredData: (session as any).vapi_structured_data,
-        finalTranscript: (session as any).final_transcript,
-        candidateName: session.candidate_name,
-        position: session.position,
-        duration: session.duration
-      })
-    } catch (analysisError) {
-      console.error('Error in enhanced analysis:', analysisError)
-      // Continue with basic data if analysis fails
+    const hasExistingAnalysis = (session as any).analysis_score > 0 || 
+                               ((session as any).strengths && (session as any).strengths.length > 0) ||
+                               ((session as any).category_scores && Object.keys((session as any).category_scores || {}).length > 0);
+    
+    if (!hasExistingAnalysis) {
+      console.log('🔄 No existing analysis found, generating enhanced analysis...');
+      try {
+        enhancedAnalysis = await InterviewAnalysisService.analyzeInterview({
+          vapiSummary: (session as any).vapi_summary,
+          vapiSuccessEvaluation: (session as any).vapi_success_evaluation,
+          vapiStructuredData: (session as any).vapi_structured_data,
+          finalTranscript: (session as any).final_transcript,
+          candidateName: session.candidate_name,
+          position: session.position,
+          duration: session.duration
+        })
+
+        // Save the generated analysis to the database for future use
+        if (enhancedAnalysis && enhancedAnalysis.overallScore > 0) {
+          console.log('💾 Saving generated analysis to database...');
+          try {
+            await prisma.interviewSession.update({
+              where: { id: sessionId },
+              data: {
+                analysis_score: enhancedAnalysis.overallScore,
+                analysis_feedback: enhancedAnalysis.detailedFeedback,
+                strengths: enhancedAnalysis.strengths,
+                areas_for_improvement: enhancedAnalysis.areasForImprovement,
+                category_scores: enhancedAnalysis.categoryScores,
+                hiring_recommendation: enhancedAnalysis.hiringRecommendation,
+                key_insights: enhancedAnalysis.keyInsights,
+                interview_metrics: enhancedAnalysis.interviewFlow
+              }
+            });
+            console.log('✅ Analysis saved to database successfully');
+          } catch (saveError) {
+            console.error('❌ Failed to save analysis to database:', saveError);
+            // Continue even if save fails - we still have the analysis in memory
+          }
+        }
+      } catch (analysisError) {
+        console.error('Error in enhanced analysis:', analysisError)
+        // Continue with basic data if analysis fails
+      }
     }
 
-    // Calculate overall score (prioritize enhanced analysis)
-    let overallScore = enhancedAnalysis?.overallScore || session.overall_score || 0
-    if (!overallScore && (session as any).analysis_score) {
-      overallScore = (session as any).analysis_score
-    }
+    // Calculate overall score (prioritize existing database analysis)
+    let overallScore = (session as any).analysis_score || session.overall_score || enhancedAnalysis?.overallScore || 0
 
     // Process question scores from structured data
     let questionScores = (session as any).question_scores
@@ -60,17 +88,18 @@ export async function GET(request: NextRequest) {
       questionScores = (session as any).vapi_structured_data.question_scores || null
     }
 
-    // Format the results with enhanced data
+    // Format the results prioritizing database data over enhanced analysis
     const results = {
       id: session.id,
       candidateName: session.candidate_name,
       candidateEmail: session.candidate_email,
       position: session.position,
       duration: session.duration || 0,
-      overallScore,      analysisScore: enhancedAnalysis?.overallScore || (session as any).analysis_score || 0,
-      analysisFeedback: enhancedAnalysis?.detailedFeedback || (session as any).analysis_feedback || '',
-      strengths: enhancedAnalysis?.strengths || (session as any).strengths || [],
-      areasForImprovement: enhancedAnalysis?.areasForImprovement || (session as any).areas_for_improvement || [],
+      overallScore,
+      analysisScore: (session as any).analysis_score || enhancedAnalysis?.overallScore || 0,
+      analysisFeedback: (session as any).analysis_feedback || enhancedAnalysis?.detailedFeedback || '',
+      strengths: (session as any).strengths || enhancedAnalysis?.strengths || [],
+      areasForImprovement: (session as any).areas_for_improvement || enhancedAnalysis?.areasForImprovement || [],
       questionScores,
       vapiSummary: (session as any).vapi_summary,
       vapiSuccessEvaluation: (session as any).vapi_success_evaluation,
@@ -83,19 +112,27 @@ export async function GET(request: NextRequest) {
       templateTitle: session.template?.title || 'Unknown Template',
       interviewerName: session.interviewer?.full_name || 'Unknown Interviewer',
       
-      // Enhanced analysis data
-      enhancedAnalysis: enhancedAnalysis ? {
-        categoryScores: enhancedAnalysis.categoryScores,
-        hiringRecommendation: enhancedAnalysis.hiringRecommendation,
-        keyInsights: enhancedAnalysis.keyInsights,
-        questionAnalysis: enhancedAnalysis.questionAnalysis,
-        interviewFlow: enhancedAnalysis.interviewFlow,
-        summaryReport: InterviewAnalysisService.generateSummaryReport(
-          enhancedAnalysis,
+      // Enhanced analysis data (use database category_scores if available)
+      enhancedAnalysis: {
+        categoryScores: (session as any).category_scores || enhancedAnalysis?.categoryScores || {},
+        hiringRecommendation: (session as any).hiring_recommendation || enhancedAnalysis?.hiringRecommendation || 'Pending',
+        keyInsights: (session as any).key_insights || enhancedAnalysis?.keyInsights || [],
+        questionAnalysis: enhancedAnalysis?.questionAnalysis || [],
+        interviewFlow: (session as any).interview_metrics || enhancedAnalysis?.interviewFlow || {},
+        summaryReport: enhancedAnalysis ? InterviewAnalysisService.generateSummaryReport(
+          {
+            ...enhancedAnalysis,
+            overallScore: (session as any).analysis_score || enhancedAnalysis.overallScore,
+            categoryScores: (session as any).category_scores || enhancedAnalysis.categoryScores,
+            hiringRecommendation: (session as any).hiring_recommendation || enhancedAnalysis.hiringRecommendation,
+            strengths: (session as any).strengths || enhancedAnalysis.strengths,
+            areasForImprovement: (session as any).areas_for_improvement || enhancedAnalysis.areasForImprovement,
+            keyInsights: (session as any).key_insights || enhancedAnalysis.keyInsights
+          },
           session.candidate_name,
           session.position
-        )
-      } : null
+        ) : `Analysis for ${session.candidate_name} - ${session.position}`
+      }
     }
 
     return NextResponse.json({

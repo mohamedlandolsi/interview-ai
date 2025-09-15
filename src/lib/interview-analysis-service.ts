@@ -38,25 +38,52 @@ export class InterviewAnalysisService {
     console.log('🔍 Processing Vapi analysis from webhook for session:', sessionId)
 
     try {
-      // Extract analysis data from webhook payload
-      const analysisData = this.extractAnalysisFromWebhook(webhookData)
-      if (!analysisData) {
-        console.error('❌ No valid analysis data found in webhook payload')
-        return false
+      const message = webhookData.message || webhookData;
+      
+      // Extract structured data from the analysis
+      const structuredData =
+        typeof message.analysis?.structuredData === 'string'
+          ? JSON.parse(message.analysis.structuredData)
+          : message.analysis?.structuredData;
+
+      if (!structuredData) {
+        console.error('Structured data is missing from the analysis payload.');
+        // Fallback or exit if no data
+        await prisma.interviewSession.update({
+          where: { id: sessionId },
+          data: { status: 'completed', completed_at: new Date() },
+        });
+        return false;
       }
 
-      // Map analysis data to our Prisma schema
-      const mappedData = this.mapAnalysisToSchema(analysisData, webhookData)
+      // --- THIS IS THE CRITICAL FIX ---
+      // Explicitly map camelCase from Vapi to snake_case for Prisma.
+      const updateData = {
+        status: 'completed' as const,
+        completed_at: new Date(),
+        final_transcript: message.transcript,
+        recording_url: message.recordingUrl,
+        vapi_summary: message.analysis?.summary, // assuming this is a direct save
+        vapi_success_evaluation: message.analysis?.successEvaluation, // assuming this is a direct save
+        vapi_structured_data: message.analysis?.structuredData, // Save the raw data for debugging
+
+        // Mapped fields for our UI
+        analysis_score: structuredData.overallScore,
+        category_scores: structuredData.categoryScores,
+        strengths: structuredData.strengths,
+        areas_for_improvement: structuredData.areasForImprovement,
+        hiring_recommendation: structuredData.hiringRecommendation,
+        key_insights: structuredData.keyInsights,
+        question_scores: structuredData.questionResponses, // Map questionResponses to question_scores
+        interview_metrics: structuredData.interviewMetrics,
+        analysis_feedback: structuredData.reasoning, // Map reasoning to analysis_feedback
+      };
 
       // Save to database
       const updateResult = await prisma.interviewSession.update({
         where: { id: sessionId },
-        data: {
-          ...mappedData,
-          status: 'completed',
-          completed_at: new Date()
-        }
-      })
+        data: updateData,
+      });
 
       // Create notification for results ready
       await createNotification({
@@ -66,9 +93,9 @@ export class InterviewAnalysisService {
         link: `/results/individual?id=${sessionId}`
       })
 
-      console.log('✅ Vapi analysis results saved successfully for session:', sessionId)
-      console.log(`   - Overall Score: ${mappedData.analysis_score}`)
-      console.log(`   - Hiring Recommendation: ${mappedData.hiring_recommendation}`)
+      console.log(`✅ Successfully saved analysis for session: ${sessionId}`);
+      console.log(`   - Overall Score: ${updateData.analysis_score}`)
+      console.log(`   - Hiring Recommendation: ${updateData.hiring_recommendation}`)
       return true
 
     } catch (error) {
