@@ -58,10 +58,18 @@ interface VapiWebhookEvent {
 
 // Webhook event handlers
 const handleCallStarted = async (event: VapiWebhookEvent) => {
-  console.log('Call started:', event.call?.id)
+  console.log('📞 Call started event received:', {
+    callId: event.call?.id,
+    assistantId: event.call?.assistantId,
+    timestamp: event.timestamp,
+    startedAt: event.call?.startedAt
+  })
   
   try {
-    if (!event.call?.id) return
+    if (!event.call?.id) {
+      console.error('❌ Call started event missing call ID')
+      return
+    }
     
     // Find existing session by call ID
     let session = await getSessionByCallId(event.call.id)
@@ -76,16 +84,26 @@ const handleCallStarted = async (event: VapiWebhookEvent) => {
           vapi_assistant_id: event.call?.assistantId,
         }
       })
-      console.log('Updated existing session for call:', event.call.id)
+      console.log('✅ Updated existing session for call:', event.call.id)
     } else {
       // Try to find a session that was created without a call ID and update it
-      // Look for recent sessions without call IDs
+      // Look for recent sessions without call IDs (expanded search criteria)
       const recentSession = await prisma.interviewSession.findFirst({
         where: {
           AND: [
-            { vapi_call_id: { in: ['', null] } },
-            { created_at: { gte: new Date(Date.now() - 10 * 60 * 1000) } }, // Within last 10 minutes
-            { status: 'scheduled' }
+            { 
+              OR: [
+                { vapi_call_id: null },
+                { vapi_call_id: '' }
+              ]
+            },
+            { created_at: { gte: new Date(Date.now() - 30 * 60 * 1000) } }, // Within last 30 minutes (increased)
+            { 
+              OR: [
+                { status: 'scheduled' },
+                { status: 'in_progress' } // Also look for in_progress sessions without call IDs
+              ]
+            }
           ]
         },
         orderBy: { created_at: 'desc' }
@@ -93,7 +111,7 @@ const handleCallStarted = async (event: VapiWebhookEvent) => {
 
       if (recentSession) {
         // Update this session with the call ID
-        await prisma.interviewSession.update({
+        const updatedSession = await prisma.interviewSession.update({
           where: { id: recentSession.id },
           data: {
             vapi_call_id: event.call.id,
@@ -102,7 +120,13 @@ const handleCallStarted = async (event: VapiWebhookEvent) => {
             started_at: new Date(event.call?.startedAt || event.timestamp),
           }
         })
-        console.log('Updated recent session with call ID:', event.call.id, 'Session:', recentSession.id)      } else {
+        console.log('🔗 Successfully linked call ID to session:', {
+          callId: event.call.id,
+          sessionId: recentSession.id,
+          candidateName: recentSession.candidate_name,
+          previousStatus: recentSession.status,
+          newStatus: 'in_progress'
+        })      } else {
         // Create a new session for orphaned calls
         console.log('Creating new session for orphaned call:', event.call.id)
         
@@ -130,7 +154,13 @@ const handleCallStarted = async (event: VapiWebhookEvent) => {
 }
 
 const handleCallEnded = async (event: VapiWebhookEvent) => {
-  console.log('Call ended:', event.call?.id)
+  console.log('📞 Call ended event received:', {
+    callId: event.call?.id,
+    endedAt: event.call?.endedAt,
+    startedAt: event.call?.startedAt,
+    cost: event.call?.cost,
+    timestamp: event.timestamp
+  })
   
   try {
     // Update interview session with final data
@@ -147,7 +177,13 @@ const handleCallEnded = async (event: VapiWebhookEvent) => {
       }
     })
     
-    console.log('Interview session updated for ended call:', event.call?.id)
+    console.log('✅ Interview session updated for ended call:', {
+      callId: event.call?.id,
+      sessionsUpdated: updatedSessions.count,
+      duration: event.call?.endedAt && event.call?.startedAt 
+        ? Math.round((new Date(event.call.endedAt).getTime() - new Date(event.call.startedAt).getTime()) / 60000)
+        : 'unknown'
+    })
 
     // Trigger post-interview analysis
     if (updatedSessions.count > 0 && event.call?.id) {

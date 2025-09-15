@@ -80,6 +80,7 @@ export const InterviewResultsComponent: React.FC = () => {
   const [results, setResults] = useState<InterviewResults | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showTranscript, setShowTranscript] = useState(false);
 
   useEffect(() => {
     if (sessionId) {
@@ -564,6 +565,39 @@ export const InterviewResultsComponent: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Transcript Section */}
+      {results.finalTranscript && results.finalTranscript.trim() && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-blue-600" />
+                <CardTitle>Interview Transcript</CardTitle>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTranscript(!showTranscript)}
+              >
+                {showTranscript ? 'Hide' : 'Show'} Transcript
+              </Button>
+            </div>
+            <CardDescription>
+              Full conversation from your interview session
+            </CardDescription>
+          </CardHeader>
+          {showTranscript && (
+            <CardContent>
+              <div className="max-h-96 overflow-y-auto">
+                <pre className="whitespace-pre-wrap text-sm font-mono bg-gray-50 p-4 rounded-lg">
+                  {results.finalTranscript}
+                </pre>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
     </div>
   );
 };
