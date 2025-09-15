@@ -30,9 +30,17 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAuth } from "@/contexts/AuthContext"
 
 const loginSchema = z.object({
-  email: z.string().email("Please enter a valid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  rememberMe: z.boolean(),
+  email: z
+    .string()
+    .min(1, "Email is required")
+    .email("Please enter a valid email address")
+    .max(254, "Email is too long"),
+  password: z
+    .string()
+    .min(1, "Password is required")
+    .min(6, "Password must be at least 6 characters")
+    .max(128, "Password is too long"),
+  rememberMe: z.boolean().default(false),
 })
 
 type LoginFormData = z.infer<typeof loginSchema>
@@ -51,6 +59,7 @@ export default function LoginPage() {
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
+    mode: "onBlur", // Validate on blur for better UX
     defaultValues: {
       email: "",
       password: "",
@@ -92,16 +101,29 @@ export default function LoginPage() {
       setAuthError(null)
       setSuccessMessage(null)
 
-      const { error } = await signIn(data.email, data.password)
+      // Additional client-side validation
+      if (!data.email.trim()) {
+        setAuthError('Email is required')
+        return
+      }
+
+      if (!data.password.trim()) {
+        setAuthError('Password is required')
+        return
+      }
+
+      const { error } = await signIn(data.email.trim(), data.password)
 
       if (error) {
         // Handle specific error types
         if (error.message.includes('Invalid login credentials')) {
-          setAuthError('Invalid email or password. Please try again.')
+          setAuthError('Invalid email or password. Please check your credentials and try again.')
         } else if (error.message.includes('Email not confirmed')) {
           setAuthError('Please check your email and click the confirmation link before signing in.')
         } else if (error.message.includes('Too many requests')) {
           setAuthError('Too many login attempts. Please wait a few minutes before trying again.')
+        } else if (error.message.includes('User not found')) {
+          setAuthError('No account found with this email address. Please check your email or sign up.')
         } else {
           setAuthError(error.message)
         }
@@ -192,24 +214,28 @@ export default function LoginPage() {
               <FormField
                 control={form.control}
                 name="email"
-                render={({ field }) => (
+                render={({ field, fieldState }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>                    <FormControl>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
                       <Input
                         placeholder="Enter your email"
                         type="email"
                         {...field}
                         disabled={isLoading}
                         autoComplete="email"
+                        className={fieldState.error ? "border-destructive focus-visible:ring-destructive" : ""}
+                        aria-invalid={fieldState.error ? "true" : "false"}
+                        aria-describedby={fieldState.error ? `${field.name}-error` : undefined}
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage id={fieldState.error ? `${field.name}-error` : undefined} />
                   </FormItem>
                 )}
               />              <FormField
                 control={form.control}
                 name="password"
-                render={({ field }) => (
+                render={({ field, fieldState }) => (
                   <FormItem>
                     <FormLabel>Password</FormLabel>
                     <FormControl>
@@ -220,6 +246,9 @@ export default function LoginPage() {
                           {...field}
                           disabled={isLoading}
                           autoComplete="current-password"
+                          className={fieldState.error ? "border-destructive focus-visible:ring-destructive pr-10" : "pr-10"}
+                          aria-invalid={fieldState.error ? "true" : "false"}
+                          aria-describedby={fieldState.error ? `${field.name}-error` : undefined}
                         />
                         <Button
                           type="button"
@@ -228,6 +257,7 @@ export default function LoginPage() {
                           className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                           onClick={() => setShowPassword(!showPassword)}
                           disabled={isLoading}
+                          aria-label={showPassword ? "Hide password" : "Show password"}
                         >
                           {showPassword ? (
                             <EyeOff className="h-4 w-4" />
@@ -237,7 +267,7 @@ export default function LoginPage() {
                         </Button>
                       </div>
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage id={fieldState.error ? `${field.name}-error` : undefined} />
                   </FormItem>
                 )}
               />
@@ -275,7 +305,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={isLoading}
+                disabled={isLoading || !form.formState.isValid}
               >
                 {isLoading ? (
                   <>
