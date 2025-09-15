@@ -22,7 +22,7 @@ export function DashboardLayout({ children, className }: DashboardLayoutProps) {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-full bg-background">
       {/* Sidebar */}
       <div className={cn(
         "fixed inset-y-0 left-0 z-50 md:relative md:translate-x-0 transition-transform duration-300 ease-in-out",
@@ -40,7 +40,7 @@ export function DashboardLayout({ children, className }: DashboardLayoutProps) {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0">
         {/* Header */}
         <DashboardHeader onMenuClick={handleMenuClick} />
 

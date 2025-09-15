@@ -1,84 +1,124 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle, Clock, UserPlus, FileText, AlertCircle } from "lucide-react"
+﻿"use client"
 
-const activities = [
-  {
-    id: 1,
-    type: "interview_completed",
-    title: "Interview Completed",
-    description: "Sarah Wilson completed Frontend Developer interview",
-    time: "2 minutes ago",
-    icon: CheckCircle,
-    iconColor: "text-green-500",
-  },
-  {
-    id: 2,
-    type: "candidate_invited",
-    title: "Candidate Invited",
-    description: "Invitation sent to Michael Chen for Product Manager role",
-    time: "15 minutes ago",
-    icon: UserPlus,
-    iconColor: "text-blue-500",
-  },
-  {
-    id: 3,
-    type: "template_created",
-    title: "Template Created",
-    description: "New Backend Developer interview template created",
-    time: "1 hour ago",
-    icon: FileText,
-    iconColor: "text-purple-500",
-  },
-  {
-    id: 4,
-    type: "interview_started",
-    title: "Interview Started",
-    description: "Emma Thompson started UI/UX Designer interview",
-    time: "2 hours ago",
-    icon: Clock,
-    iconColor: "text-orange-500",
-  },
-  {
-    id: 5,
-    type: "system_alert",
-    title: "System Alert",
-    description: "Interview server maintenance scheduled for tonight",
-    time: "3 hours ago",
-    icon: AlertCircle,
-    iconColor: "text-red-500",
-  },
-]
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { CheckCircle, Clock, UserPlus, FileText, AlertCircle, Calendar } from "lucide-react"
+import { useRecentActivity } from "@/hooks/useRecentActivity"
+
+// Icon mapping for different activity types
+const iconMap = {
+  CheckCircle,
+  Clock,
+  UserPlus,
+  FileText,
+  AlertCircle,
+  Calendar,
+}
 
 export function ActivityTimeline() {
+  const { activities, loading, error } = useRecentActivity()
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="flex items-start space-x-4">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted animate-pulse" />
+              <div className="flex-1 min-w-0 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+                  <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+                </div>
+                <div className="h-3 w-48 bg-muted animate-pulse rounded" />
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">
+              Failed to load recent activity
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {error}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (activities.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">
+              No recent activity
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Activity will appear here as you use the platform
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Recent Activity</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {activities.map((activity, index) => (
-          <div key={activity.id} className="flex items-start space-x-4">
-            <div className={`flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center ${activity.iconColor}`}>
-              <activity.icon className="h-4 w-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-foreground">
-                  {activity.title}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {activity.time}
+        {activities.map((activity, index) => {
+          const IconComponent = iconMap[activity.icon as keyof typeof iconMap] || Clock
+          
+          return (
+            <div key={activity.id} className="relative flex items-start space-x-4">
+              <div className={`flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center ${activity.iconColor}`}>
+                <IconComponent className="h-4 w-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-foreground">
+                    {activity.title}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {activity.time}
+                  </p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {activity.description}
                 </p>
               </div>
-              <p className="text-sm text-muted-foreground">
-                {activity.description}
-              </p>
+              {index < activities.length - 1 && (
+                <div 
+                  className="absolute left-8 mt-8 w-px h-6 bg-border" 
+                  style={{ marginLeft: '15px' }} 
+                />
+              )}
             </div>
-            {index < activities.length - 1 && (
-              <div className="absolute left-8 mt-8 w-px h-6 bg-border" style={{ marginLeft: '15px' }} />
-            )}
-          </div>
-        ))}
+          )
+        })}
         <div className="pt-4 border-t">
           <button className="text-sm text-primary hover:underline">
             View all activity
