@@ -321,16 +321,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setLoading(false)      // Handle different auth events
       switch (event) {        case 'SIGNED_IN':
-          // Only redirect on actual sign-in (not session restoration)
-          // Check if this is coming from a login page or if there's no current pathname
+          // Only redirect on actual sign-in from auth pages (not session restoration or from homepage)
+          // Check if this is coming from a login page
           const currentPath = window.location.pathname
           const isOnAuthPage = ['/login', '/register', '/forgot-password', '/reset-password'].includes(currentPath)
-          const isOnHomePage = currentPath === '/'
           
-          console.log('SIGNED_IN event - currentPath:', currentPath, 'isOnAuthPage:', isOnAuthPage, 'isOnHomePage:', isOnHomePage)
+          console.log('SIGNED_IN event - currentPath:', currentPath, 'isOnAuthPage:', isOnAuthPage)
           
-          // Only redirect if we're on an auth page or home page AND user is confirmed
-          if (session?.user && session.user.email_confirmed_at && (isOnAuthPage || isOnHomePage)) {
+          // Only redirect if we're on an auth page AND user is confirmed
+          if (session?.user && session.user.email_confirmed_at && isOnAuthPage) {
             console.log('Redirecting to dashboard from SIGNED_IN event')
             router.push('/dashboard')
           } else {
