@@ -5,7 +5,8 @@ import { StatsCards } from "@/components/dashboard/StatsCards"
 import { RecentInterviewsTable } from "@/components/dashboard/RecentInterviewsTable"
 import { QuickActions } from "@/components/dashboard/QuickActions"
 import { ActivityTimeline } from "@/components/dashboard/ActivityTimeline"
-import { ChartPlaceholder } from "@/components/dashboard/ChartPlaceholder"
+import { InterviewTrendsChart } from "@/components/dashboard/InterviewTrendsChart"
+import { SuccessRateChart } from "@/components/dashboard/SuccessRateChart"
 import { DashboardRoute } from "@/components/auth/ProtectedRoute"
 import { useAuth } from "@/contexts/AuthContext"
 
@@ -44,8 +45,8 @@ export default function DashboardPage() {
             <div className="lg:col-span-2 space-y-6">
               {/* Charts Row */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <ChartPlaceholder title="Interview Trends" />
-                <ChartPlaceholder title="Success Rate" />
+                <InterviewTrendsChart />
+                <SuccessRateChart />
               </div>
 
               {/* Recent Interviews Table */}
@@ -60,12 +61,6 @@ export default function DashboardPage() {
               {/* Activity Timeline */}
               <ActivityTimeline />
             </div>
-          </div>
-
-          {/* Additional Charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ChartPlaceholder title="Performance by Department" height="h-48" />
-            <ChartPlaceholder title="Interview Duration Analysis" height="h-48" />
           </div>
         </div>
       </DashboardLayout>
